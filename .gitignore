@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tgz
+.clidoc-tmp/
+.DS_Store
+demo/app.log

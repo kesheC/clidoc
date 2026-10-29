@@ -1,0 +1,53 @@
+{
+  "name": "clidoc",
+  "version": "0.1.0",
+  "description": "Self-updating CLI docs: record real command output straight into your README.",
+  "type": "module",
+  "bin": {
+    "clidoc": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "node --experimental-strip-types src/cli.ts",
+    "demo": "node demo/make-log.mjs --lines 12000 --out demo/app.log",
+    "docs": "npm run docs:record && npm run docs:render",
+    "docs:record": "node dist/cli.js record --id analyze-log -- node demo/analyze-log.mjs demo/app.log && node dist/cli.js record --id help -- node dist/cli.js --help",
+    "docs:render": "node dist/cli.js render",
+    "docs:check": "node dist/cli.js render --check",
+    "prepare": "npm run build",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "readme",
+    "documentation",
+    "cli",
+    "snapshot",
+    "docs",
+    "markdown",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

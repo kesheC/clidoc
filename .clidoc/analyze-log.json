@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "analyze-log",
+  "command": "node demo/analyze-log.mjs demo/app.log",
+  "argv": [
+    "node",
+    "demo/analyze-log.mjs",
+    "demo/app.log"
+  ],
+  "cwd": ".",
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "stdout": "file        demo/app.log\nlines       12000\nwindow      <timestamp> .. <timestamp>\nlevels      ERROR=2067  INFO=7961  WARN=1972\nstatuses    200=8010  404=1993  500=1997\nlatency     p50=<duration> p95=<duration> p99=<duration> max=<duration>\nslowest     req-102607 took <duration>\nerrors      5xx=1997 (16.64%)\n",
+  "stderr": "",
+  "env": {
+    "COLUMNS": "80",
+    "LINES": "40",
+    "TZ": "UTC",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "NO_COLOR": "1",
+    "FORCE_COLOR": "0"
+  },
+  "stdoutRaw": "file        demo/app.log\nlines       12000\nwindow      2025-04-30T08:00:00.000Z .. 2025-04-30T08:27:23.863Z\nlevels      ERROR=2067  INFO=7961  WARN=1972\nstatuses    200=8010  404=1993  500=1997\nlatency     p50=240ms p95=458ms p99=477ms max=481ms\nslowest     req-102607 took 481ms\nerrors      5xx=1997 (16.64%)\n",
+  "stderrRaw": ""
+}
