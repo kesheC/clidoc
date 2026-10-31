@@ -382,6 +382,84 @@ Everything ships from `node:child_process`, `node:fs`, `node:path`,
 `node:os` and `node:url`. The only `devDependencies` are TypeScript,
 `@types/node` and Vitest.
 
+## Release pipeline / 发布链路
+
+A docs tool that publishes a broken tarball is worse than useless, so the release
+path is guarded by `node -e` snippets that run *before* anything is uploaded.
+Because that code only executes on a tag push, it is the easiest thing to have
+subtly wrong — so it is also tested. `scripts/extract-workflow-step.py` prints a
+step body verbatim (`--local` maps the GitHub expressions onto shell variables):
+
+```console
+$ python scripts/extract-workflow-step.py .github/workflows/release.yml "Publish release assets" | head -3
+set -euo pipefail
+TARBALL="${{ steps.pack.outputs.tarball }}"
+# --- tag/version gate ---
+```
+
+**1. The tag gate.** Releases are tag-driven, so the tag is the only thing naming
+the version. Without a gate, pushing `v0.1.7` uploads 0.1.6 assets under a 0.1.7
+label. Running the real extracted body with a drifted tag stops before the first
+`gh` call — `RELEASE_NOTES.md` is never even written:
+
+```console
+$ TAG=v0.1.7 bash publish.sh
+tag/version mismatch: tag says 0.1.7, package.json says 0.1.6
+exit 1
+notes: not written
+```
+
+With a matching tag the gate passes and the next step proceeds — here it is a
+`gh` call that fails only because this local run used a dummy token:
+
+```console
+$ TAG=v0.1.6 bash publish.sh
+tag v0.1.6 matches package.json version 0.1.6
+HTTP 401: Bad credentials (https://api.github.com/repos/kesheC/clidoc/releases)
+exit 1
+```
+
+**2. Package contents, checked from the repo root.** `npm pack --dry-run --json`
+runs before any `cd`: packing from a throwaway directory would inspect *that*
+empty package and pass forever. The extracted CI smoke step, run locally against
+the real repo:
+
+```console
+$ bash smoke.sh | grep -E "package contents ok|clidoc --version =|library import ok"
+package contents ok: 21 entries, 18 under dist/
+clidoc --version = 0.1.6 (expected 0.1.6)
+library import ok, 28 exports
+exit 0
+```
+
+The same assertion fails loudly on a rotten artifact. Here `npm pack` was pointed
+at a package root that has no `dist/`, and every problem is reported at once:
+
+```console
+$ node assert.cjs
+dist/index.js is missing from the tarball
+dist/cli.js is missing from the tarball
+dist/index.d.ts is missing, so the types do not ship
+the tarball has no dist/ entries at all
+exit 1
+```
+
+**3. What the tarball does *not* contain.** The published build turns sourcemaps
+off (`tsconfig.build.json`): the tarball ships only `dist/`, so a `.js.map` would
+point at `src/*.ts` that is not in it. `npm run build` also clears `dist/` first,
+because `tsc` leaves the previous build's files in place — otherwise turning maps
+off would still ship the maps from the last build:
+
+```console
+$ npm run build && npm pack --dry-run --json
+0 sourcemaps, 21 entries in the tarball
+```
+
+**4. Those snippets are themselves tested.** `tests/workflow.test.ts` extracts the
+real `node -e` bodies out of the YAML and runs them against fixture manifests,
+positive and negative, so a typo in the workflow fails on a laptop instead of on
+release day. 14 cases.
+
 ## FAQ / 边界
 
 **Does it run a shell?** No. `spawn` is called with `shell: false`, so
