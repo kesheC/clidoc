@@ -174,3 +174,100 @@ describe("unsafe output", () => {
     expect(check.code).toBe(0);
   });
 });
+
+describe("unknown options", () => {
+  // B2 (round 2): "render --chek" used to fall through to a plain render,
+  // rewrite the README and exit 0 — a broken CI gate that edits docs.
+  it("refuses a mistyped --check and leaves the README byte-identical", async () => {
+    await cli(["record", "--id", "a", "--", "node", "-e", "console.log('real')"]);
+    const readme = path.join(root, "README.md");
+    await fs.writeFile(
+      readme,
+      "# t\n\n<!-- clidoc:start a -->\nOLD\n<!-- clidoc:end a -->\n",
+      "utf8",
+    );
+    const before = await fs.readFile(readme);
+
+    const run = await cli(["render", "--chek"]);
+
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain('unknown option "--chek"');
+    expect(run.stderr).toContain("--check");
+    expect(await fs.readFile(readme)).toEqual(before);
+  });
+
+  it("rejects an unknown option for every command", async () => {
+    const runs = await Promise.all(
+      ["render", "record", "run", "list"].map((command) => cli([command, "--nope"])),
+    );
+    for (const run of runs) {
+      expect(run.code).toBe(2);
+      expect(run.stderr).toContain('unknown option "--nope"');
+    }
+  });
+
+  it("still accepts --check and prints the drift verdict", async () => {
+    await cli(["record", "--id", "a", "--", "node", "-e", "console.log('one')"]);
+    await cli(["render"]);
+    const check = await cli(["render", "--check"]);
+    expect(check.code).toBe(0);
+    expect(check.stdout).toContain("up to date");
+  });
+
+  it("does not treat a child flag after the separator as unknown", async () => {
+    const run = await cli(["record", "--id", "a", "--", "echo", "--nope"]);
+    expect(run.code).toBe(0);
+  });
+
+  it("keeps a lone dash usable as a command argument", async () => {
+    const run = await cli(["record", "--id", "a", "--", "echo", "-"]);
+    expect(run.code).toBe(0);
+  });
+
+  it("names the separator when the option is not a near-miss", async () => {
+    const run = await cli(["record", "--id", "a", "--where", "x"]);
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain('after "--"');
+  });
+
+  it("suggests the intended command on a typo", async () => {
+    const run = await cli(["rendr"]);
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain('Did you mean "render"?');
+  });
+});
+
+describe("directory options", () => {
+  it("fails when --cwd does not exist, for every command", async () => {
+    const missing = path.join(root, "no", "such", "dir");
+    await cli(["record", "--id", "a", "--", "node", "-e", "0"]);
+    const runs = await Promise.all(
+      ["render", "record", "run", "list"].map((command) =>
+        cli([command, "--id", "a", "--cwd", missing, "--", "node", "-e", "0"]),
+      ),
+    );
+    for (const run of runs) {
+      expect(run.code).toBe(2);
+      expect(run.stderr).toContain("does not exist");
+    }
+  });
+
+  it("fails when --root does not exist", async () => {
+    const run = await cli(["render", "--root", path.join(root, "gone")]);
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain("does not exist");
+  });
+
+  it("rejects a --root that is a file", async () => {
+    const run = await cli(["render", "--root", path.join(root, "README.md")]);
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain("not a directory");
+  });
+
+  it("accepts an existing --cwd and --root", async () => {
+    await cli(["record", "--id", "a", "--", "node", "-e", "console.log('one')"]);
+    await cli(["render"]);
+    const run = await cli(["render", "--check", "--root", root, "--cwd", root]);
+    expect(run.code).toBe(0);
+  });
+});

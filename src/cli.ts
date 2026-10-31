@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -57,6 +57,83 @@ Examples:
   ${NAME} render --check          # CI gate: fails when docs drift
 `;
 
+/** Every long option the parser accepts, for "did you mean" suggestions. */
+const KNOWN_OPTIONS = [
+  "--id",
+  "--cwd",
+  "--root",
+  "--readme",
+  "--timeout",
+  "--max-lines",
+  "--env",
+  "--check",
+  "--allow-missing",
+  "--no-normalize",
+  "--no-raw",
+  "--stamp",
+  "--help",
+  "--version",
+] as const;
+
+/** Plain Levenshtein distance; inputs here are short option names. */
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const substitution = (previous[j - 1] as number) + (a[i - 1] === b[j - 1] ? 0 : 1);
+      current[j] = Math.min((previous[j] as number) + 1, (current[j - 1] as number) + 1, substitution);
+    }
+    previous = current;
+  }
+  return previous[b.length] as number;
+}
+
+const KNOWN_COMMANDS = ["run", "record", "render", "list"] as const;
+
+/**
+ * A mistyped command left the child argv in place, so it looked exactly like
+ * `record <cmd>`. With "--" present the intent was unambiguous, which makes a
+ * silent record far more dangerous than an error.
+ */
+function unknownCommandMessage(command: string): string {
+  let best: string | undefined;
+  let bestDistance = 3;
+  for (const known of KNOWN_COMMANDS) {
+    const distance = editDistance(command, known);
+    if (distance < bestDistance) {
+      best = known;
+      bestDistance = distance;
+    }
+  }
+  const suggestion = best ? ` Did you mean "${best}"?` : "";
+  return `unknown command "${command}".${suggestion} Run "${NAME} --help" to list the commands.`;
+}
+
+function unknownOptionMessage(arg: string): string {
+  const suggestion = suggestOption(arg);
+  if (suggestion) {
+    return `unknown option "${arg}". Did you mean "${suggestion}"?`;
+  }
+  // Without a near match the likeliest cause is a flag meant for the command,
+  // typed before the "--" separator.
+  return `unknown option "${arg}". Arguments for the recorded command go after "--"; run "${NAME} --help" to list the options.`;
+}
+
+/** The closest known option, when one is close enough to be worth naming. */
+function suggestOption(arg: string): string | undefined {
+  let best: string | undefined;
+  let bestDistance = 3;
+  for (const option of KNOWN_OPTIONS) {
+    const distance = editDistance(arg, option);
+    if (distance < bestDistance) {
+      best = option;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 interface ParsedArgs {
   command: string | undefined;
   target: string[];
@@ -76,6 +153,11 @@ interface ParsedArgs {
   env: Record<string, string>;
   help: boolean;
   version: boolean;
+  /** True when "--" was present, so later flags belong to the child. */
+  afterSeparator: boolean;
+  /** The user actually typed --root / --cwd (as opposed to the defaults). */
+  rootGiven: boolean;
+  cwdGiven: boolean;
 }
 
 function parseNumber(flag: string, raw: string | undefined): number {
@@ -104,14 +186,19 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     env: {},
     help: false,
     version: false,
+    afterSeparator: false,
+    rootGiven: false,
+    cwdGiven: false,
   };
 
   const rest: string[] = [];
+  let afterSeparator = false;
   let index = 0;
   for (; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     if (arg === "--") {
       rest.push(...argv.slice(index + 1));
+      afterSeparator = true;
       index = argv.length;
       break;
     }
@@ -138,9 +225,11 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--cwd":
         parsed.cwd = next();
+        parsed.cwdGiven = true;
         break;
       case "--root":
         parsed.root = next();
+        parsed.rootGiven = true;
         break;
       case "--readme":
         parsed.readme = next();
@@ -182,13 +271,39 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         parsed.stamp = true;
         break;
       default:
+        // Anything dash-shaped that reached this point is a typo or a flag from
+        // a newer version. Silently treating it as a positional is how
+        // `render --chek` used to run a destructive render and exit 0.
+        // A lone "-" is the conventional stdin placeholder, not an option.
+        if (arg.startsWith("-") && arg !== "-") {
+          throw new ClidocError("usage", unknownOptionMessage(arg));
+        }
         rest.push(arg);
     }
   }
 
   parsed.target = rest.slice(1).map((value) => value);
   parsed.command = rest[0];
+  parsed.afterSeparator = afterSeparator;
   return parsed;
+}
+
+/**
+ * A directory option must point at a directory that exists. Without this,
+ * `render --check --root C:/nope` reported "no snapshots" (exit 2 only by
+ * luck) and any command with a typo'd --cwd looked like a passing run.
+ */
+function assertDirectory(target: string, flag: string): string {
+  let stats;
+  try {
+    stats = statSync(target);
+  } catch {
+    throw new ClidocError("usage", `${flag} points at "${target}", which does not exist.`);
+  }
+  if (!stats.isDirectory()) {
+    throw new ClidocError("usage", `${flag} points at "${target}", which is not a directory.`);
+  }
+  return target;
 }
 
 /**
@@ -197,12 +312,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
  * project, otherwise a plain `clidoc render` at the root finds nothing.
  */
 function resolveRoot(args: ParsedArgs): string {
-  return path.resolve(args.root ?? ".");
+  return assertDirectory(path.resolve(args.root ?? "."), "--root");
 }
 
 /** Where the child process actually runs; `--cwd` only ever means this. */
 function resolveChildCwd(args: ParsedArgs): string {
-  return path.resolve(args.cwd);
+  return assertDirectory(path.resolve(args.cwd), "--cwd");
 }
 
 /** Keys whose values are almost certainly secrets and must not reach the README. */
@@ -337,6 +452,12 @@ ${USAGE}`);
   }
 
   try {
+    // Validate the directories the user actually named, for every command.
+    // Only checking them where they are used is how `render --cwd <typo>` used
+    // to succeed while doing nothing with the flag.
+    if (args.rootGiven) assertDirectory(path.resolve(args.root ?? "."), "--root");
+    if (args.cwdGiven) assertDirectory(path.resolve(args.cwd), "--cwd");
+
     switch (args.command) {
       case "run":
         return await commandRun(args);
@@ -347,10 +468,7 @@ ${USAGE}`);
       case "list":
         return await commandList(args);
       default:
-        throw new ClidocError(
-          "usage",
-          `Unknown command "${args.command}". Try "${NAME} --help".`,
-        );
+        throw new ClidocError("usage", unknownCommandMessage(args.command));
     }
   } catch (error) {
     if (error instanceof ClidocError) {
