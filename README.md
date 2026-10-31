@@ -34,33 +34,37 @@ clidoc 把「真的跑一遍」的结果直接写回 README，并在 CI 里用 `
 
 ## Install / 安装
 
-From the repository (no build step of your own — `prepare` compiles it):
+`clidoc` is **not published to the npm registry** — that name belongs to an
+unrelated package. Each release ships a tarball you can install directly:
 
 ```console
-$ npm install --save-dev github:kesheC/clidoc
-$ npx clidoc --version
-0.1.0
-```
-
-Or make it global:
-
-```console
-$ npm install -g github:kesheC/clidoc
+$ npm install -g https://github.com/kesheC/clidoc/releases/download/v0.1.1/clidoc-0.1.1.tgz
 $ clidoc --version
-0.1.0
+0.1.1
 ```
 
-Or vendor the tarball, which is what the tests do:
+Or as a project dev dependency:
 
 ```console
-$ npm pack                      # -> clidoc-0.1.0.tgz
-$ npm install -D ./clidoc-0.1.0.tgz
+$ npm install -D https://github.com/kesheC/clidoc/releases/download/v0.1.1/clidoc-0.1.1.tgz
+$ npx clidoc --version
+0.1.1
 ```
 
-**Zero runtime dependencies** — Node.js `>=20` stdlib only (`node:child_process`,
+Or build it from a checkout:
+
+```console
+$ git clone https://github.com/kesheC/clidoc.git && cd clidoc
+$ npm ci && npm run build && npm link
+$ clidoc --version
+0.1.1
+```
+
+**Zero runtime dependencies** — Node.js `>=20.11` stdlib only (`node:child_process`,
 `node:fs`, `node:path`). Nothing to audit, nothing to break in a lockfile bump.
-clidoc is not published to the npm registry yet; the git URL above is the
-supported install path.
+
+> `npm install -g git+https://github.com/...` does **not** work on npm 11: a global
+> install skips `devDependencies`, so the `prepare` build finds no `tsc`.
 
 ## Quick start / 60 秒上手
 

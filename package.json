@@ -1,6 +1,6 @@
 {
   "name": "clidoc",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Self-updating CLI docs: record real command output straight into your README.",
   "type": "module",
   "bin": {
@@ -20,7 +20,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.11"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

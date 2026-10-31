@@ -8,7 +8,7 @@ import { DEFAULT_MAX_LINES, DEFAULT_README, renderReadme } from "./render.js";
 import { readAllSnapshots } from "./store.js";
 
 const NAME = "clidoc";
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 const USAGE = `${NAME} — record real CLI output straight into your README.
 
