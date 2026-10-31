@@ -458,7 +458,15 @@ $ npm run build && npm pack --dry-run --json
 **4. Those snippets are themselves tested.** `tests/workflow.test.ts` extracts the
 real `node -e` bodies out of the YAML and runs them against fixture manifests,
 positive and negative, so a typo in the workflow fails on a laptop instead of on
-release day. 14 cases.
+release day. 15 cases.
+
+中文：发布链路上有两道闸门，都只在打 tag 时才执行，所以最容易写错也最难当场发现。
+第一道比对 tag 与 `package.json` 的版本，不一致就在任何 `gh` 调用之前退出 1，
+避免 `v0.1.7` 悄悄上传 0.1.6 的产物；第二道在仓库根目录解析
+`npm pack --dry-run --json`，断言 `dist` 入口齐全、没有泄漏 `src/` 与 `tests/`、
+没有指向不存在源文件的 sourcemap，并把打出来的包装进临时目录再 import 一次库。
+这些片段由 `tests/workflow.test.ts` 从 YAML 里原样抽出来跑，正反例都有，
+所以 YAML 里写错一个字符会在本地就红，而不是等到发版当天。
 
 ## FAQ / 边界
 
