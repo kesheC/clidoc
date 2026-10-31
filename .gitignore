@@ -4,3 +4,6 @@ dist/
 .clidoc-tmp/
 .DS_Store
 demo/app.log
+# Written by the packaged-tarball CI step and by anyone running
+# scripts/extract-workflow-step.py locally.
+pack-meta.json
