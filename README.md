@@ -409,6 +409,12 @@ The full rule list is `NORMALIZER_NAMES`, exported from `clidoc`:
 `ansi`, `lineEndings`, `trailingWhitespace`, `cwd`, `home`, `pathSeparators`,
 `isoTimestamp`, `dateTime`, `uuid`, `hexId`, `duration`, `size`.
 
+## Security and changes / 安全与变更
+
+Found a vulnerability? Please do not open a public issue — [SECURITY.md](SECURITY.md)
+explains the private reporting channel and what to include. Every release is written
+up in [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 MIT © 2026 kesheC — see [LICENSE](LICENSE).
