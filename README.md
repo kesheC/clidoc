@@ -34,13 +34,14 @@ clidoc 把「真的跑一遍」的结果直接写回 README，并在 CI 里用 `
 
 ## Install / 安装
 
-`clidoc` is **not published to the npm registry** — that name belongs to an
-unrelated package. Each release ships a tarball you can install directly:
+`clidoc` is **not published to the npm registry** — the name belongs to a different
+project by another author ([`Figmusk/clidoc`](https://github.com/Figmusk/clidoc)). Each
+release here ships a tarball you can install directly:
 
 ```console
 $ npm install -g https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ clidoc --version
-0.1.5
+0.1.6
 ```
 
 Every release publishes the same tarball under a stable name (`clidoc.tgz`) alongside a
@@ -60,7 +61,7 @@ Or as a project dev dependency:
 ```console
 $ npm install -D https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ npx clidoc --version
-0.1.5
+0.1.6
 ```
 
 Or build it from a checkout:
@@ -69,7 +70,7 @@ Or build it from a checkout:
 $ git clone https://github.com/kesheC/clidoc.git && cd clidoc
 $ npm ci && npm run build && npm link
 $ clidoc --version
-0.1.5
+0.1.6
 ```
 
 **Zero runtime dependencies** — Node.js `>=20.11` stdlib only (`node:child_process`,
