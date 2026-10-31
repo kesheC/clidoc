@@ -38,7 +38,7 @@ clidoc 把「真的跑一遍」的结果直接写回 README，并在 CI 里用 `
 unrelated package. Each release ships a tarball you can install directly:
 
 ```console
-$ npm install -g https://github.com/kesheC/clidoc/releases/download/v0.1.1/clidoc-0.1.1.tgz
+$ npm install -g https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ clidoc --version
 0.1.1
 ```
@@ -46,7 +46,7 @@ $ clidoc --version
 Or as a project dev dependency:
 
 ```console
-$ npm install -D https://github.com/kesheC/clidoc/releases/download/v0.1.1/clidoc-0.1.1.tgz
+$ npm install -D https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ npx clidoc --version
 0.1.1
 ```
