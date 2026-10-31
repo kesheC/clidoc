@@ -29,7 +29,7 @@
     "dev": "node --experimental-strip-types src/cli.ts",
     "demo": "node demo/make-log.mjs --lines 12000 --out demo/app.log",
     "docs": "npm run docs:record && npm run docs:render",
-    "docs:record": "node dist/cli.js record --id analyze-log -- node demo/analyze-log.mjs demo/app.log && node dist/cli.js record --id help -- node dist/cli.js --help",
+    "docs:record": "node dist/cli.js record --id analyze-log -- node demo/analyze-log.mjs demo/app.log && node dist/cli.js record --id help --max-lines 80 -- node dist/cli.js --help",
     "docs:render": "node dist/cli.js render",
     "docs:check": "node dist/cli.js render --check",
     "prepack": "npm run build"

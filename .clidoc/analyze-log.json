@@ -22,6 +22,7 @@
     "NO_COLOR": "1",
     "FORCE_COLOR": "0"
   },
+  "maxLines": 40,
   "stdoutRaw": "file        demo/app.log\nlines       12000\nwindow      2025-04-30T08:00:00.000Z .. 2025-04-30T08:27:23.863Z\nlevels      ERROR=2067  INFO=7961  WARN=1972\nstatuses    200=8010  404=1993  500=1997\nlatency     p50=240ms p95=458ms p99=477ms max=481ms\nslowest     req-102607 took 481ms\nerrors      5xx=1997 (16.64%)\n",
   "stderrRaw": ""
 }

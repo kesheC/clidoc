@@ -125,8 +125,12 @@ $ clidoc record --id version -- node dist/cli.js --version
 recorded version (exit 0)
 ```
 
-Options: `--id <name>`, `--cwd <dir>`, `--timeout <ms>`, `--env K=V`,
-`--no-normalize`, `--no-raw`, `--stamp`.
+Options: `--id <name>`, `--root <dir>`, `--cwd <dir>`, `--timeout <ms>`,
+`--env K=V`, `--no-normalize`, `--no-raw`, `--stamp`.
+
+`--root` is where `.clidoc/` and the README live (default `.`); `--cwd` is the
+directory the *child* runs in. They are separate on purpose: recording
+`--cwd packages/api` must not scatter snapshots into `packages/api/.clidoc`.
 
 ### `clidoc render` — write the snapshots back into the README
 
@@ -254,6 +258,7 @@ Usage:
 Options (record / run):
   --id <name>          snapshot id (default: derived from the command)
   --cwd <dir>          directory to run the command in (default: .)
+  --root <dir>         project root holding .clidoc/ (default: .)
   --timeout <ms>       kill the command after N ms (default: 15000)
   --env <K=V>          extra environment variable, repeatable
   --no-normalize       keep raw output (no path/time/id rewriting)
@@ -271,13 +276,20 @@ Global:
   -v, --version        print the version
 
 README markers:
-  <!-- clidoc:start <id> -->
+  &lt;!-- clidoc:start <id> -->
   ...generated, do not edit...
-  <!-- clidoc:end <id> -->
+  &lt;!-- clidoc:end <id> -->
+
+Argument passing:
+  Everything before "--" is a clidoc option; everything after it is handed to the
+  command untouched, even when it looks like a clidoc flag. A clidoc option that
+  appears first still wins: --help before "--" shows this help instead of
+  running anything.
 
 Examples:
-  clidoc run node dist/cli.js --help
-  clidoc record git log --oneline -5 --cwd . --id changelog
+  clidoc run --id help -- node dist/cli.js --help
+  clidoc record --id changelog -- git log --oneline -5
+  clidoc record --id api --cwd packages/api -- npm test
   clidoc render --check          # CI gate: fails when docs drift
 ```
 
@@ -290,11 +302,12 @@ Examples:
    (`COLUMNS=80`, `TZ=UTC`, `LANG=C.UTF-8`, `NO_COLOR=1`) with `CI`,
    `FORCE_COLOR`, `CLICOLOR` and friends scrubbed. A hard timeout kills the
    child with `SIGKILL`.
-2. **`normalize`** runs a fixed chain of 12 rules over stdout and stderr:
-   ANSI escapes, CRLF, trailing whitespace, working directory → `.`, home → `~`,
-   Windows path separators, ISO timestamps → `<timestamp>`, `HH:MM:SS` →
-   `<time>`, UUIDs and long hex → `<id>`, durations → `<duration>`, byte sizes →
-   `<size>`. Rules are independent and skippable per call.
+2. **`normalize`** runs a fixed chain of 13 rules over stdout and stderr:
+   ANSI escapes, CRLF, trailing whitespace, a `PATH`-shaped value → `<path>`,
+   working directory → `.`, home → `~`, Windows path separators, ISO timestamps
+   → `<timestamp>`, `HH:MM:SS` → `<time>`, UUIDs and long hex → `<id>`,
+   durations → `<duration>`, byte sizes → `<size>`. Rules are independent and
+   skippable per call.
 3. **`render`** finds every `<!-- clidoc:start id -->` / `<!-- clidoc:end id -->`
    pair, renders `$ command` + a `console` fence (truncating at `--max-lines`),
    and splices the new bodies in bottom-up so line indexes stay valid.
@@ -400,6 +413,22 @@ clidoc: "clidoc:start version" (line 1) is never closed.
 [exit code: 2]
 ```
 
+**What if my command prints a code fence or clidoc's own markers?** clidoc
+refuses to break itself. A body containing backtick runs gets a longer fence
+(` ````console ` rather than ` ```console `), and any `<!-- clidoc:start` in the
+output is written as `&lt;!-- clidoc:start` so it can never become a real marker.
+As a backstop, `record`/`run` re-parse what they are about to write and abort
+with exit `2` instead of writing a README clidoc cannot read back.
+
+**Can the recorded command read stdin?** No. The child is spawned with
+`stdio: ["ignore", "pipe", "pipe"]`, so its stdin is `/dev/null`; a command that
+only produces output when fed input will record an empty body.
+
+**Does the recorded command see my environment?** Only a small whitelist
+(`PATH`, `HOME`, `TMPDIR`, `SystemRoot` on Windows, …) plus `--env K=V` pairs,
+with colour and CI variables scrubbed. `--env` values are written into the JSON
+snapshot verbatim, so clidoc warns when a key looks like a secret.
+
 **Does it work on Windows?** Yes — that is the platform it was developed on.
 `spawn` is shell-free and paths go through `node:path`. Line endings are
 handled too: clidoc detects whether your README uses LF or CRLF and writes back
@@ -419,8 +448,8 @@ the real number in the docs, print only the stable part (or record that block
 with `--no-normalize`) and let the volatile part live in a benchmark file.
 
 The full rule list is `NORMALIZER_NAMES`, exported from `clidoc`:
-`ansi`, `lineEndings`, `trailingWhitespace`, `cwd`, `home`, `pathSeparators`,
-`isoTimestamp`, `dateTime`, `uuid`, `hexId`, `duration`, `size`.
+`ansi`, `lineEndings`, `trailingWhitespace`, `pathList`, `cwd`, `home`,
+`pathSeparators`, `isoTimestamp`, `dateTime`, `uuid`, `hexId`, `duration`, `size`.
 
 ## Security and changes / 安全与变更
 
