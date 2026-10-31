@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-01
+
+### Changed
+
+- **The install note now names the project that owns the npm name.** `clidoc` on npm belongs to [`Figmusk/clidoc`](https://github.com/Figmusk/clidoc); the README used to call it "an unrelated package" without saying which, which is a claim a reader cannot check.
+- Sample transcripts in the README show the version this release actually prints.
+
 ## [0.1.5] - 2026-11-01
 
 ### Changed
@@ -108,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix: Ubuntu and Windows, Node 20 and 22.
 - Zero runtime dependencies.
 
-[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/kesheC/clidoc/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/kesheC/clidoc/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/kesheC/clidoc/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/kesheC/clidoc/compare/v0.1.2...v0.1.3
