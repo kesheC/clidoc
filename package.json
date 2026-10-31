@@ -53,5 +53,10 @@
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
-  }
+  },
+  "author": "kesheC",
+  "bugs": {
+    "url": "https://github.com/kesheC/clidoc/issues"
+  },
+  "homepage": "https://github.com/kesheC/clidoc#readme"
 }
