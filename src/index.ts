@@ -48,6 +48,7 @@ export type { ReplaceBlocksOptions } from "./markdown.js";
 export {
   DEFAULT_MAX_LINES,
   DEFAULT_README,
+  assertSelfParseable,
   renderBlocks,
   renderReadme,
   renderSnapshot,
@@ -75,6 +76,8 @@ export interface CreateSnapshotOptions {
   keepRaw?: boolean;
   /** Store duration and timestamp in the snapshot. Defaults to false. */
   stamp?: boolean;
+  /** Pin the render line budget into the snapshot. */
+  maxLines?: number;
 }
 
 /** Runs a command, normalises its output and writes `.clidoc/<id>.json`. */
@@ -107,6 +110,10 @@ export async function createSnapshot(options: CreateSnapshotOptions): Promise<Sn
     stderr: normalizeOutput(capture.stderr, normalizeOptions).text,
     env: { ...PINNED_ENV },
   };
+
+  // Persist the line budget so a later `render --check` re-derives exactly the
+  // same body instead of silently disagreeing with what `run` just wrote.
+  if (options.maxLines !== undefined) snapshot.maxLines = options.maxLines;
 
   if (options.keepRaw !== false) {
     snapshot.stdoutRaw = capture.stdout;

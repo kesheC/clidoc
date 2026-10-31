@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { ClidocError } from "./errors.js";
-import { firstDifference, replaceBlocks } from "./markdown.js";
+import { findBlocks, firstDifference, replaceBlocks } from "./markdown.js";
 import type { Snapshot } from "./types.js";
 
 export const DEFAULT_MAX_LINES = 40;
@@ -15,6 +15,27 @@ export interface RenderOptions {
   includeStderr?: boolean;
   /** Append `[exit code: N]` when the command failed. Defaults to true. */
   showExitCode?: boolean;
+}
+
+/**
+ * A snapshot's stdout is untrusted text. If it happens to contain clidoc's own
+ * marker syntax, rendering it verbatim would create a second (ghost) block that
+ * clidoc then refuses to parse. Breaking the `<!--` opener keeps the visible
+ * text identical in HTML while making the line inert to the marker parser.
+ */
+function escapeMarkers(line: string): string {
+  return line.replace(/<!--(?=\s*clidoc:)/g, "&lt;!--");
+}
+
+/** Longest run of backticks anywhere in the body, so the fence can outrun it. */
+function longestBacktickRun(lines: readonly string[]): number {
+  let longest = 0;
+  for (const line of lines) {
+    for (const run of line.match(/`+/g) ?? []) {
+      if (run.length > longest) longest = run.length;
+    }
+  }
+  return longest;
 }
 
 function truncate(lines: string[], maxLines: number): string[] {
@@ -30,7 +51,10 @@ function truncate(lines: string[], maxLines: number): string[] {
  * a `$ command` line followed by a fenced `console` block.
  */
 export function renderSnapshot(snapshot: Snapshot, options: RenderOptions = {}): string {
-  const maxLines = options.maxLines ?? DEFAULT_MAX_LINES;
+  // A snapshot may pin the width it was recorded with; that beats both the
+  // caller's flag and the default so `run --max-lines` and `render --check`
+  // can never disagree.
+  const maxLines = snapshot.maxLines ?? options.maxLines ?? DEFAULT_MAX_LINES;
   if (!Number.isInteger(maxLines) || maxLines <= 0) {
     throw new ClidocError("usage", `--max-lines must be a positive integer, got ${maxLines}.`);
   }
@@ -53,7 +77,12 @@ export function renderSnapshot(snapshot: Snapshot, options: RenderOptions = {}):
     );
   }
 
-  const lines = [`$ ${snapshot.command}`, "```console", ...body, "```"];
+  const safeBody = body.map(escapeMarkers);
+  // The fence must be longer than any backtick run in the body, otherwise a
+  // body line made of backticks closes the block early and silently shreds
+  // every marker that follows it.
+  const fence = "`".repeat(Math.max(3, longestBacktickRun(safeBody) + 1));
+  const lines = [`$ ${escapeMarkers(snapshot.command)}`, `${fence}console`, ...safeBody, fence];
   return lines.join("\n");
 }
 
@@ -70,6 +99,26 @@ export function renderBlocks(
     bodies.set(snapshot.id, renderSnapshot(snapshot, options));
   }
   return bodies;
+}
+
+/**
+ * Re-parses freshly rendered markdown with our own parser. A block whose body
+ * escapes its fence can leave a marker pair nested inside the outer one, which
+ * turns the README into something `clidoc render` refuses to read afterwards.
+ * Catching it here means a broken render fails loudly instead of being written.
+ */
+export function assertSelfParseable(markdown: string, ids: readonly string[]): void {
+  try {
+    findBlocks(markdown);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new ClidocError(
+      "markdown",
+      "Refusing to write a README this tool cannot read back " +
+        `(${ids.join(", ")}): ${detail} ` +
+        "The command output escapes its code fence or contains marker syntax.",
+    );
+  }
 }
 
 export interface RenderReadmeOptions extends RenderOptions {
@@ -143,6 +192,10 @@ export async function renderReadme(
 
   const nextMarkdown = eol === "\n" ? result.markdown : result.markdown.replace(/\n/g, "\r\n");
   const changed = nextMarkdown !== markdown;
+
+  // Never hand back a document our own parser would choke on.
+  assertSelfParseable(result.markdown, result.replaced);
+
   if (changed && !options.check) {
     await fs.writeFile(readmePath, nextMarkdown, "utf8");
   }

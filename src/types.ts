@@ -28,6 +28,8 @@ export interface Snapshot {
   durationMs?: number;
   /** ISO timestamp of the capture, only stored with `--stamp`. */
   recordedAt?: string;
+  /** Line budget this snapshot was recorded with; `render` honours it. */
+  maxLines?: number;
   /** Fingerprint of the pinned environment variables. */
   env: Record<string, string>;
 }

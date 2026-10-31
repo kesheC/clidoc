@@ -196,3 +196,71 @@ describe("runAndCapture integration", () => {
     expect(result.exitCode).toBe(0);
   });
 });
+
+// B1/B2: output that contains fences or marker syntax must not corrupt the
+// README, and a second render must still parse it.
+describe("hostile command output", () => {
+  const FENCE_AND_MARKER = [
+    "console.log('text')",
+    "console.log(String.fromCharCode(96,96,96))",
+    "console.log('<!-- clidoc:start ghost -->')",
+    "console.log('ghost body')",
+    "console.log('<!-- clidoc:end ghost -->')",
+  ].join(";");
+
+  it("keeps the README parseable when the output emits a bare fence", async () => {
+    await record("greet", "console.log('text');console.log(String.fromCharCode(96,96,96));console.log('injected')");
+    await renderReadme(await readAllSnapshots(root), { root, allowMissing: true });
+
+    const markdown = await fs.readFile(path.join(root, "README.md"), "utf8");
+    expect(findBlocks(markdown).map((b) => b.id)).toEqual(["greet", "failing"]);
+
+    const check = await renderReadme(await readAllSnapshots(root), {
+      root,
+      check: true,
+      allowMissing: true,
+    });
+    expect(check.changed).toBe(false);
+  });
+
+  it("does not create a ghost block from marker syntax in the output", async () => {
+    await record("greet", FENCE_AND_MARKER);
+    await renderReadme(await readAllSnapshots(root), { root, allowMissing: true });
+
+    const markdown = await fs.readFile(path.join(root, "README.md"), "utf8");
+    expect(findBlocks(markdown).map((b) => b.id)).toEqual(["greet", "failing"]);
+    expect(markdown).toContain("&lt;!-- clidoc:start ghost");
+
+    // Rendering twice must not accumulate anything.
+    const again = await renderReadme(await readAllSnapshots(root), {
+      root,
+      allowMissing: true,
+    });
+    expect(again.changed).toBe(false);
+  });
+});
+
+// M3: the line budget travels with the snapshot so run and check agree.
+describe("maxLines round-trip", () => {
+  it("keeps a wide maxLines stable across record and check", async () => {
+    const script = "for(let i=1;i<=100;i++)console.log('L'+i)";
+    await createSnapshot({ root, id: "greet", argv: [process.execPath, "-e", script], maxLines: 200 });
+    await renderReadme(await readAllSnapshots(root), { root, allowMissing: true });
+
+    const check = await renderReadme(await readAllSnapshots(root), {
+      root,
+      check: true,
+      allowMissing: true,
+    });
+    expect(check.changed).toBe(false);
+    expect(check.markdown).toContain("L100");
+  });
+
+  it("still truncates at the default when no budget was recorded", async () => {
+    const script = "for(let i=1;i<=100;i++)console.log('L'+i)";
+    await record("greet", script);
+    await renderReadme(await readAllSnapshots(root), { root, allowMissing: true });
+    const markdown = await fs.readFile(path.join(root, "README.md"), "utf8");
+    expect(markdown).toContain("... (60 more lines)");
+  });
+});

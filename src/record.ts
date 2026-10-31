@@ -79,7 +79,12 @@ export function buildEnv(options: BuildEnvOptions = {}): Record<string, string> 
  * into a POSIX shell. Double quotes are used where they are unambiguous
  * (`node -e "console.log('hi')"`), single quotes otherwise.
  */
-export function quoteArg(arg: string): string {
+export function quoteArg(raw: string): string {
+  // A literal ESC in argv would recreate terminal escapes in the README and
+  // swallow the "$ command" line; show it rather than emit it.
+  const arg = raw
+    .replace(/\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)/g, "")
+    .replace(/\u001B/g, "\\e");
   if (arg.length === 0) return "''";
   if (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(arg)) return arg;
   const safeInDouble = !/["`$\\!]/.test(arg);

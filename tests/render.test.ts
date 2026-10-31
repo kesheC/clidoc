@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { ClidocError } from "../src/errors.js";
-import { renderBlocks, renderSnapshot } from "../src/render.js";
+import { findBlocks } from "../src/markdown.js";
+import { assertSelfParseable, renderBlocks, renderSnapshot } from "../src/render.js";
 import type { Snapshot } from "../src/types.js";
 
 function snap(over: Partial<Snapshot> = {}): Snapshot {
@@ -69,6 +70,81 @@ describe("renderSnapshot", () => {
 
   it("rejects a non-positive maxLines", () => {
     expect(() => renderSnapshot(snap(), { maxLines: 0 })).toThrowError(ClidocError);
+  });
+
+  // B1: a body line made of backticks used to close the fence early.
+  it("lengthens the fence past any backtick run in the body", () => {
+    const out = renderSnapshot(snap({ stdout: "before\n\n```\ninjected\n```" }));
+    const lines = out.split("\n");
+    expect(lines[1]).toBe("````console");
+    expect(lines.at(-1)).toBe("````");
+  });
+
+  it("keeps a three-backtick fence when the body has none", () => {
+    const body = renderSnapshot(snap({ stdout: "plain" })).split("\n");
+    expect(body[1]).toBe("```console");
+  });
+
+  it("outruns a five-backtick run, not just three", () => {
+    const body = renderSnapshot(snap({ stdout: "`````" })).split("\n");
+    expect(body[1]).toBe("``````console");
+  });
+
+  // B2: marker syntax in the output must not become a real marker.
+  it("escapes marker syntax so it cannot open a ghost block", () => {
+    const out = renderSnapshot(
+      snap({ stdout: "<!-- clidoc:start ghost -->\nbody\n<!-- clidoc:end ghost -->" }),
+    );
+    expect(out).not.toContain("<!-- clidoc:start ghost");
+    expect(out).toContain("&lt;!-- clidoc:start ghost");
+    expect(() => findBlocks(out)).not.toThrow();
+  });
+
+  it("leaves ordinary HTML comments alone", () => {
+    expect(renderSnapshot(snap({ stdout: "<!-- keep me -->" }))).toContain("<!-- keep me -->");
+  });
+
+  // M3: the recorded budget wins over the caller's flag and the default.
+  it("honours maxLines stored on the snapshot", () => {
+    const stdout = Array.from({ length: 100 }, (_, i) => `L${i + 1}`).join("\n");
+    const out = renderSnapshot(snap({ stdout, maxLines: 200 }), { maxLines: 5 });
+    expect(out).toContain("L100");
+    expect(out).not.toContain("more lines");
+  });
+
+  it("falls back to the caller's flag when the snapshot has no budget", () => {
+    const stdout = Array.from({ length: 100 }, (_, i) => `L${i + 1}`).join("\n");
+    expect(renderSnapshot(snap({ stdout }), { maxLines: 3 })).toContain("... (97 more lines)");
+  });
+});
+
+describe("assertSelfParseable", () => {
+  it("accepts markdown whose blocks are well formed", () => {
+    const md = [
+      "# t",
+      "<!-- clidoc:start a -->",
+      renderSnapshot(snap({ id: "a" })),
+      "<!-- clidoc:end a -->",
+    ].join("\n");
+    expect(() => assertSelfParseable(md, ["a"])).not.toThrow();
+  });
+
+  // Guard for the failure mode where the rendered body escapes its fence and
+  // leaves a nested marker pair behind.
+  it("rejects a document with a nested marker pair", () => {
+    const md = [
+      "<!-- clidoc:start a -->",
+      "<!-- clidoc:start ghost -->",
+      "<!-- clidoc:end ghost -->",
+      "<!-- clidoc:end a -->",
+    ].join("\n");
+    expect(() => assertSelfParseable(md, ["a"])).toThrowError(/Refusing to write/);
+  });
+
+  it("rejects a document with an unclosed block", () => {
+    expect(() => assertSelfParseable("<!-- clidoc:start a -->\ntext", ["a"])).toThrowError(
+      /Refusing to write/,
+    );
   });
 });
 
