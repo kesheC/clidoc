@@ -22,6 +22,7 @@ Usage:
 Options (record / run):
   --id <name>          snapshot id (default: derived from the command)
   --cwd <dir>          directory to run the command in (default: .)
+  --root <dir>         project root holding .clidoc/ (default: .)
   --timeout <ms>       kill the command after N ms (default: 15000)
   --env <K=V>          extra environment variable, repeatable
   --no-normalize       keep raw output (no path/time/id rewriting)
@@ -43,9 +44,16 @@ README markers:
   ...generated, do not edit...
   <!-- clidoc:end <id> -->
 
+Argument passing:
+  Everything before "--" is a ${NAME} option; everything after it is handed to the
+  command untouched, even when it looks like a ${NAME} flag. A ${NAME} option that
+  appears first still wins: --help before "--" shows this help instead of
+  running anything.
+
 Examples:
-  ${NAME} run node dist/cli.js --help
-  ${NAME} record git log --oneline -5 --cwd . --id changelog
+  ${NAME} run --id help -- node dist/cli.js --help
+  ${NAME} record --id changelog -- git log --oneline -5
+  ${NAME} record --id api --cwd packages/api -- npm test
   ${NAME} render --check          # CI gate: fails when docs drift
 `;
 
@@ -53,6 +61,9 @@ interface ParsedArgs {
   command: string | undefined;
   target: string[];
   id: string | undefined;
+  /** Snapshot/README root. Always the working directory unless --root wins. */
+  root: string | undefined;
+  /** Directory the child runs in. */
   cwd: string;
   timeoutMs: number;
   readme: string;
@@ -80,6 +91,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     command: undefined,
     target: [],
     id: undefined,
+    root: undefined,
     cwd: ".",
     timeoutMs: 15000,
     readme: DEFAULT_README,
@@ -126,6 +138,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--cwd":
         parsed.cwd = next();
+        break;
+      case "--root":
+        parsed.root = next();
         break;
       case "--readme":
         parsed.readme = next();
@@ -176,23 +191,51 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   return parsed;
 }
 
+/**
+ * Where `.clidoc/` and the README live. This is deliberately independent of
+ * `--cwd`: recording `--cwd subdir` must not move the snapshot out of the
+ * project, otherwise a plain `clidoc render` at the root finds nothing.
+ */
 function resolveRoot(args: ParsedArgs): string {
-  // --cwd is both "where the command runs" and "where .clidoc lives" unless
-  // the caller overrides the readme path with something absolute.
+  return path.resolve(args.root ?? ".");
+}
+
+/** Where the child process actually runs; `--cwd` only ever means this. */
+function resolveChildCwd(args: ParsedArgs): string {
   return path.resolve(args.cwd);
 }
 
+/** Keys whose values are almost certainly secrets and must not reach the README. */
+const SECRET_KEY = /(?:secret|token|passw(?:or)?d|api[-_]?key|private[-_]?key|credential|auth)/i;
+
+function warnAboutEnv(args: ParsedArgs): void {
+  for (const key of Object.keys(args.env)) {
+    if (SECRET_KEY.test(key)) {
+      process.stderr.write(
+        `warning: --env ${key} looks secret and will be written verbatim into README.md.\n`,
+      );
+    }
+  }
+  if (args.readme !== DEFAULT_README) {
+    process.stderr.write(
+      `warning: --readme is ignored by "record"; it only applies when rendering.\n`,
+    );
+  }
+}
+
 async function commandRecord(args: ParsedArgs): Promise<number> {
+  warnAboutEnv(args);
   const root = resolveRoot(args);
   const snapshot = await createSnapshot({
     root,
     argv: args.target,
     id: args.id,
-    cwd: root,
+    cwd: resolveChildCwd(args),
     timeoutMs: args.timeoutMs,
     env: args.env,
     keepRaw: !args.noRaw,
     stamp: args.stamp,
+    maxLines: args.maxLines,
     normalize: args.noNormalize ? false : {},
   });
 
@@ -315,7 +358,15 @@ ${USAGE}`);
 `);
       return error.exitCode;
     }
-    throw error;
+    // A raw fs failure (EPERM/EACCES/EISDIR/ENOENT while writing) must not look
+    // like a drift verdict: --check owns exit 1, everything else is 2.
+    const code = (error as NodeJS.ErrnoException).code;
+    const message = error instanceof Error ? error.message : String(error);
+    // Node already prefixes fs errors with the code ("EPERM: operation …").
+    const detail = code && !message.startsWith(code) ? `${code}: ${message}` : message;
+    process.stderr.write(`${NAME}: ${detail}
+`);
+    return 2;
   }
 }
 
