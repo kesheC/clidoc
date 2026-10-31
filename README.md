@@ -40,7 +40,7 @@ unrelated package. Each release ships a tarball you can install directly:
 ```console
 $ npm install -g https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ clidoc --version
-0.1.1
+0.1.2
 ```
 
 Or as a project dev dependency:
@@ -48,7 +48,7 @@ Or as a project dev dependency:
 ```console
 $ npm install -D https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ npx clidoc --version
-0.1.1
+0.1.2
 ```
 
 Or build it from a checkout:
@@ -57,7 +57,7 @@ Or build it from a checkout:
 $ git clone https://github.com/kesheC/clidoc.git && cd clidoc
 $ npm ci && npm run build && npm link
 $ clidoc --version
-0.1.1
+0.1.2
 ```
 
 **Zero runtime dependencies** — Node.js `>=20.11` stdlib only (`node:child_process`,
