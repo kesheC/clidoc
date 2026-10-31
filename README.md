@@ -63,8 +63,10 @@ $ clidoc --version
 **Zero runtime dependencies** — Node.js `>=20.11` stdlib only (`node:child_process`,
 `node:fs`, `node:path`). Nothing to audit, nothing to break in a lockfile bump.
 
-> `npm install -g git+https://github.com/...` does **not** work on npm 11: a global
-> install skips `devDependencies`, so the `prepare` build finds no `tsc`.
+> Installing straight from git (`npm install -g git+https://github.com/...`) does
+> **not** work: the checkout has no build output and a global install skips
+> `devDependencies`, so there is no `tsc` to build it with. Use the tarball, or
+> clone and build it yourself.
 
 ## Quick start / 60 秒上手
 

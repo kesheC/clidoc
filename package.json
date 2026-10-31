@@ -32,7 +32,6 @@
     "docs:record": "node dist/cli.js record --id analyze-log -- node demo/analyze-log.mjs demo/app.log && node dist/cli.js record --id help -- node dist/cli.js --help",
     "docs:render": "node dist/cli.js render",
     "docs:check": "node dist/cli.js render --check",
-    "prepare": "npm run build",
     "prepack": "npm run build"
   },
   "keywords": [
