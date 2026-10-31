@@ -5,6 +5,7 @@ export const NORMALIZER_NAMES = [
   "ansi",
   "lineEndings",
   "trailingWhitespace",
+  "pathList",
   "cwd",
   "home",
   "pathSeparators",
@@ -33,6 +34,8 @@ export interface NormalizeOptions {
   cwd?: string;
   /** Directory that gets collapsed to `~`. Defaults to the OS home directory. */
   homeDir?: string;
+  /** PATH value that gets collapsed to `<path>`. Defaults to `process.env.PATH`. */
+  pathValue?: string;
   /** Set to false to disable every rule. Defaults to true. */
   enabled?: boolean;
   /** Rules to skip, e.g. `["size"]` for output that legitimately reports bytes. */
@@ -42,6 +45,7 @@ export interface NormalizeOptions {
 interface RuleContext {
   cwd: string;
   homeDir: string;
+  pathValue: string;
 }
 
 type Rule = (text: string, ctx: RuleContext) => { text: string; count: number };
@@ -128,6 +132,15 @@ const RULES: Record<NormalizerName, Rule> = {
 
   trailingWhitespace: (text) => applyRegex(text, /[ \t]+$/gm, ""),
 
+  // The child inherits PATH, so `echo $PATH` would publish the maintainer's
+  // machine layout. Collapse the exact value to one stable token.
+  pathList: (text, ctx) => {
+    const value = ctx.pathValue;
+    if (value.length < 3 || !text.includes(value)) return { text, count: 0 };
+    const parts = text.split(value);
+    return { text: parts.join("<path>"), count: parts.length - 1 };
+  },
+
   cwd: (text, ctx) => replaceDirectory(text, ctx.cwd, "."),
 
   home: (text, ctx) => replaceDirectory(text, ctx.homeDir, "~"),
@@ -174,10 +187,13 @@ const RULES: Record<NormalizerName, Rule> = {
       "<duration>",
     ),
 
+  // "1.5 MB" and "1B" are sizes; "A=1 B=two" and "count 3 B variants" are not.
+  // A bare "B" only counts when it touches the number, so free-standing
+  // single-letter variables are never swallowed.
   size: (text) =>
     applyRegex(
       text,
-      /\b\d+(?:\.\d+)?\s?(?:[KMGT]i?B|B)\b/g,
+      /\b\d+(?:\.\d+)?(?:\s?[KMGT]i?B|B)\b/g,
       "<size>",
     ),
 };
@@ -196,6 +212,7 @@ export function normalizeOutput(
   const ctx: RuleContext = {
     cwd: options.cwd ?? process.cwd(),
     homeDir: options.homeDir ?? os.homedir(),
+    pathValue: options.pathValue ?? process.env.PATH ?? "",
   };
   const skip = new Set<NormalizerName>(options.disable ?? []);
 

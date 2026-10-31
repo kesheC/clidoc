@@ -60,6 +60,26 @@ describe("normalizeOutput", () => {
 
   it("collapses memory sizes", () => {
     expect(norm("heap 12.5 MB used")).toBe("heap <size> used");
+    expect(norm("file 1B")).toBe("file <size>");
+  });
+
+  // M2: a bare "B" must touch its number, or "A=1 B=two" loses the value.
+  it("does not mistake a single-letter variable for a byte unit", () => {
+    expect(norm("A=1 B=two")).toBe("A=1 B=two");
+    expect(norm("count 3 B variants")).toBe("count 3 B variants");
+    expect(norm("x = 1 B")).toBe("x = 1 B");
+  });
+
+  it("still collapses a spaced multi-byte unit", () => {
+    expect(norm("cache 512 KiB")).toBe("cache <size>");
+    expect(norm("upload 3.5 GB done")).toBe("upload <size> done");
+  });
+
+  // PATH leaks into the README through "echo $PATH"; collapse it whole.
+  it("collapses the inherited PATH value", () => {
+    const pathValue = "/usr/local/bin:/usr/bin:/bin";
+    expect(norm("PATH=" + pathValue, { pathValue })).toBe("PATH=<path>");
+    expect(norm("plain text", { pathValue })).toBe("plain text");
   });
 
   it("reports which rules fired", () => {
