@@ -152,6 +152,18 @@ README.md is up to date (2 block(s))
 Exit code `0` means the README matches the snapshots. Exit code `1` means it is
 stale (and clidoc prints the first differing line). Any other problem — broken
 markers, a missing snapshot — is a `2`.
+A typo in the flag can never turn the gate green: unknown options are rejected
+before anything runs, so `render --chek` exits `2` and leaves the README
+untouched instead of silently doing a normal (writing) render.
+
+```console
+$ clidoc render --chek
+clidoc: unknown option "--chek". Did you mean "--check"?
+[exit code: 2]
+```
+
+The same applies to `--root` and `--cwd`: if you name a directory that does not
+exist, every command stops with `2` instead of quietly using the default.
 
 ```console
 $ clidoc render --check
@@ -439,6 +451,10 @@ fresh clone see the same bytes.)
 **Does it edit files other than the README?** No. `record`/`run` add one JSON
 file under `.clidoc/`; `render` writes only `--readme`.
 
+**What happens to an option I misspell?** `clidoc` exits `2` and names the
+closest real option (`unknown option "--chek". Did you mean "--check"?`). It
+never guesses and never runs the command without the flag you meant — a CI gate
+that silently degrades to a writing `render` is worse than a red one.
 **What does NOT get normalised?** Counts, exit codes, versions and anything
 else that is stable for a given commit. Note the trade-off visible in the demo
 above: `240ms` becomes `<duration>` because a latency *is* volatile between
