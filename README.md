@@ -43,6 +43,18 @@ $ clidoc --version
 0.1.3
 ```
 
+Every release publishes the same tarball under a stable name (`clidoc.tgz`) alongside a
+`clidoc.tgz.sha256` checksum. To verify the download before running it:
+
+```bash
+curl -sLO https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
+curl -sLO https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz.sha256
+sha256sum -c clidoc.tgz.sha256          # clidoc.tgz: OK
+npm install -g ./clidoc.tgz
+```
+
+On macOS use `shasum -a 256 -c clidoc.tgz.sha256` — there is no `sha256sum` by default.
+
 Or as a project dev dependency:
 
 ```console
