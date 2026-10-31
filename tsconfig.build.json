@@ -2,7 +2,12 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "declaration": true,
-    "sourceMap": true
+    // Off for the published build only. package.json ships just dist/, so a
+    // .js.map would point at ../src/*.ts that the tarball does not contain:
+    // dead weight that roughly doubles what npm downloads. tsconfig.json keeps
+    // sourceMap on, so editors still step into the original sources.
+    "sourceMap": false,
+    "declarationMap": false
   },
   "exclude": [
     "**/*.test.ts"
