@@ -61,6 +61,19 @@ describe("assertValidId", () => {
     expect(() => assertValidId("a b")).toThrowError(ClidocError);
     expect(() => assertValidId("a/b")).toThrowError(ClidocError);
   });
+
+  // .clidoc/con.json cannot be created on Windows, so fail everywhere.
+  it("rejects Windows reserved device names", () => {
+    for (const id of ["con", "PRN", "aux", "nul", "com1", "lpt9", "CON.txt"]) {
+      expect(() => assertValidId(id)).toThrowError(/reserved device name/);
+    }
+  });
+
+  it("still accepts ids that merely start like a device name", () => {
+    expect(assertValidId("console")).toBe("console");
+    expect(assertValidId("com10")).toBe("com10");
+    expect(assertValidId("nullable")).toBe("nullable");
+  });
 });
 
 describe("deriveId", () => {

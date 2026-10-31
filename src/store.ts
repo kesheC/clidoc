@@ -7,6 +7,13 @@ import type { Snapshot } from "./types.js";
 /** Default directory holding one JSON file per snapshot. */
 export const SNAPSHOT_DIR = ".clidoc";
 
+/**
+ * Device names Windows refuses to create, with or without an extension. An id
+ * like `con` would make `.clidoc/con.json` unopenable there, so reject it
+ * everywhere instead of failing only on one platform.
+ */
+const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+
 /** Rejects ids that would escape `.clidoc/` or break the README markers. */
 export function assertValidId(id: string): string {
   if (typeof id !== "string" || id.trim().length === 0) {
@@ -16,6 +23,12 @@ export function assertValidId(id: string): string {
     throw new ClidocError(
       "usage",
       `Invalid snapshot id "${id}": use letters, digits, dot, dash or underscore.`,
+    );
+  }
+  if (WINDOWS_RESERVED.test(id)) {
+    throw new ClidocError(
+      "usage",
+      `Invalid snapshot id "${id}": that is a reserved device name on Windows.`,
     );
   }
   return id;
