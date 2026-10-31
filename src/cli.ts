@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,7 +9,7 @@ import { DEFAULT_MAX_LINES, DEFAULT_README, renderReadme } from "./render.js";
 import { readAllSnapshots } from "./store.js";
 
 const NAME = "clidoc";
-const VERSION = "0.1.2";
+const VERSION = "0.1.3";
 
 const USAGE = `${NAME} — record real CLI output straight into your README.
 
@@ -320,11 +321,24 @@ ${USAGE}`);
 
 const stripExtension = (file: string): string => file.replace(/\.(?:[cm]?[jt]s)$/, "");
 
-/** True when this module is the process entry point (not imported by a test). */
+/**
+ * True when this module is the process entry point (not imported by a test).
+ *
+ * Both sides are resolved through realpathSync because npm links the bin
+ * shim to this file: process.argv[1] then holds the symlink path while
+ * import.meta.url already holds the real one, so a plain string compare
+ * silently skips main() and the command exits having done nothing.
+ */
 function isEntryPoint(): boolean {
   const entry = process.argv[1];
   if (entry === undefined) return false;
-  return stripExtension(path.resolve(entry)) === stripExtension(fileURLToPath(import.meta.url));
+  try {
+    const invoked = stripExtension(realpathSync(entry));
+    const self = stripExtension(realpathSync(fileURLToPath(import.meta.url)));
+    return invoked === self;
+  } catch {
+    return false;
+  }
 }
 
 if (isEntryPoint()) {
