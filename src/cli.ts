@@ -10,7 +10,7 @@ import { readAllSnapshots } from "./store.js";
 import { installPipeGuard } from "./pipe.js";
 
 const NAME = "clidoc";
-const VERSION = "0.1.12";
+const VERSION = "0.1.13";
 
 const USAGE = `${NAME} — record real CLI output straight into your README.
 
