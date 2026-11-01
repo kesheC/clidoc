@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-01
+
+### Fixed
+
+- **Recorded output can no longer escape its code fence.** A body line
+  containing three backticks closed the fence early and left the following
+  marker line outside it, so `run` wrote a README the next `render` refused
+  to parse — while `run` itself still exited 0. The fence is now sized past
+  the longest backtick run in the body, `<!-- clidoc:start` inside output is
+  written escaped, and every render is re-parsed before it is written.
+- **A typo in `--cwd` no longer renders the current directory.** `--root` and
+  `--cwd` were resolved lazily where they were used, so a mistyped path fell
+  back to the default and the documented CI gate turned green on the wrong
+  tree. Both are now validated in `main()`, before dispatch, and a missing or
+  non-directory path exits 2.
+- **Unknown options are a usage error, with a suggestion.** `render --chek`
+  reached the positional branch, so the writing render ran and exited 0 — one
+  missing letter silently turned the `--check` gate into a rewrite. Every
+  command now rejects flags outside its own table, offers the nearest name by
+  edit distance, and treats a mistyped command the same way.
+- **`--cwd` no longer scatters the snapshot store.** It moved both the child's
+  working directory and `.clidoc/`, so recording `--cwd packages/api` wrote
+  snapshots where the root `render` could not find them. `--root` decides the
+  store; `--cwd` only decides where the child runs.
+- **A bare `B` is no longer read as a size unit across words.** The size rule
+  matched `1 B` inside `A=1 B=two` and rewrote it to `A=<size>=two`. A bare
+  `B` must now touch the number; the spaced form is only accepted for the
+  multi-byte units. `PATH`-shaped values collapse to `<path>`.
+- **Reserved device names and README write failures are reported.** `id` now
+  rejects `con`, `PRN`, `aux`, `nul`, `com1..`, `lpt1..`, so a snapshot cannot
+  be written to a path Windows will not reopen; an `--env` key that looks like
+  a secret is called out, because the value is copied into the snapshot and
+  from there into the README; `EPERM`/`EACCES` on the README is exit 2 with
+  one line instead of an uncaught error.
+
+### Changed
+
+- **The published tarball no longer carries dead sourcemaps.** `npm pack`
+  shipped 9 `.js.map` files whose `sources` point at a `src/` the package does
+  not contain, and `tsc` never deleted the previous build, so turning the maps
+  off in the config was not enough. `build` now clears `dist/` first and the
+  build config drops `sourceMap`/`declarationMap`: 9 maps / 30 entries /
+  35316 B packed becomes 0 maps / 21 entries / 26290 B, unpacked size
+  121164 B to 79805 B.
+
+### Security
+
+- The release job refuses to publish when the tag and `package.json`
+  disagree, and the check runs before the first `gh` call, so a drifted tag is
+  reported as tag drift rather than as a missing CHANGELOG section.
+
 ## [0.1.6] - 2026-11-01
 
 ### Changed

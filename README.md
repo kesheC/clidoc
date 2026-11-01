@@ -41,7 +41,7 @@ release here ships a tarball you can install directly:
 ```console
 $ npm install -g https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ clidoc --version
-0.1.6
+0.1.7
 ```
 
 Every release publishes the same tarball under a stable name (`clidoc.tgz`) alongside a
@@ -61,7 +61,7 @@ Or as a project dev dependency:
 ```console
 $ npm install -D https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ npx clidoc --version
-0.1.6
+0.1.7
 ```
 
 Or build it from a checkout:
@@ -70,7 +70,7 @@ Or build it from a checkout:
 $ git clone https://github.com/kesheC/clidoc.git && cd clidoc
 $ npm ci && npm run build && npm link
 $ clidoc --version
-0.1.6
+0.1.7
 ```
 
 **Zero runtime dependencies** — Node.js `>=20.11` stdlib only (`node:child_process`,
@@ -398,13 +398,13 @@ TARBALL="${{ steps.pack.outputs.tarball }}"
 ```
 
 **1. The tag gate.** Releases are tag-driven, so the tag is the only thing naming
-the version. Without a gate, pushing `v0.1.7` uploads 0.1.6 assets under a 0.1.7
-label. Running the real extracted body with a drifted tag stops before the first
-`gh` call — `RELEASE_NOTES.md` is never even written:
+the version. Without a gate, a `v0.1.7` tag on a `0.1.6` tree uploads 0.1.6
+assets under a 0.1.7 label. Running the real extracted body with a drifted tag
+stops before the first `gh` call — `RELEASE_NOTES.md` is never even written:
 
 ```console
-$ TAG=v0.1.7 bash publish.sh
-tag/version mismatch: tag says 0.1.7, package.json says 0.1.6
+$ TAG=v0.1.8 bash publish.sh
+tag/version mismatch: tag says 0.1.8, package.json says 0.1.7
 exit 1
 notes: not written
 ```
@@ -413,8 +413,8 @@ With a matching tag the gate passes and the next step proceeds — here it is a
 `gh` call that fails only because this local run used a dummy token:
 
 ```console
-$ TAG=v0.1.6 bash publish.sh
-tag v0.1.6 matches package.json version 0.1.6
+$ TAG=v0.1.7 bash publish.sh
+tag v0.1.7 matches package.json version 0.1.7
 HTTP 401: Bad credentials (https://api.github.com/repos/kesheC/clidoc/releases)
 exit 1
 ```
@@ -427,13 +427,14 @@ the real repo:
 ```console
 $ bash smoke.sh | grep -E "package contents ok|clidoc --version =|library import ok"
 package contents ok: 21 entries, 18 under dist/
-clidoc --version = 0.1.6 (expected 0.1.6)
+clidoc --version = 0.1.7 (expected 0.1.7)
 library import ok, 28 exports
 exit 0
 ```
 
 The same assertion fails loudly on a rotten artifact. Here `npm pack` was pointed
-at a package root that has no `dist/`, and every problem is reported at once:
+at a package root that has no `dist/` (`npm pack --dry-run --json --ignore-scripts`,
+so the missing build is not regenerated), and every problem is reported at once:
 
 ```console
 $ node assert.cjs
@@ -462,7 +463,7 @@ release day. 15 cases.
 
 中文：发布链路上有两道闸门，都只在打 tag 时才执行，所以最容易写错也最难当场发现。
 第一道比对 tag 与 `package.json` 的版本，不一致就在任何 `gh` 调用之前退出 1，
-避免 `v0.1.7` 悄悄上传 0.1.6 的产物；第二道在仓库根目录解析
+避免新 tag 悄悄上传旧版本的产物；第二道在仓库根目录解析
 `npm pack --dry-run --json`，断言 `dist` 入口齐全、没有泄漏 `src/` 与 `tests/`、
 没有指向不存在源文件的 sourcemap，并把打出来的包装进临时目录再 import 一次库。
 这些片段由 `tests/workflow.test.ts` 从 YAML 里原样抽出来跑，正反例都有，
