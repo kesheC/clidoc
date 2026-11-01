@@ -1,6 +1,6 @@
 {
   "name": "clidoc",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Self-updating CLI docs: record real command output straight into your README.",
   "type": "module",
   "bin": {
