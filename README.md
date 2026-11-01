@@ -14,7 +14,7 @@
 
 Every README has a block like this:
 
-```console
+```text
 $ mytool --help
 Usage: mytool [options]
   --fast   go faster        <-- written by hand, 14 months ago
@@ -108,13 +108,33 @@ anything here will be replaced
 <!-- clidoc:end help -->
 ```
 
-Then run your command through clidoc:
+Then run your command through clidoc. The transcript below is one complete run in
+an empty directory, so it reproduces exactly --- a fresh project has a single
+marker pair, which is why it renders one block:
 
-```console
-$ clidoc run --id help -- node dist/cli.js --help
+````console
+$ rm -rf /tmp/mydocs && mkdir -p /tmp/mydocs && cd /tmp/mydocs
+$ printf '<!-- clidoc:start help -->\n<!-- clidoc:end help -->\n' > README.md
+$ clidoc run --id help -- node -e "console.log('hello from my cli')"
 recorded help (exit 0)
 rendered 1 block(s) into README.md
-```
+$ cat -n README.md
+     1	<!-- clidoc:start help -->
+     2	$ node -e "console.log('hello from my cli')"
+     3	```console
+     4	hello from my cli
+     5	```
+     6	
+     7	<!-- clidoc:end help -->
+````
+
+Run it a second time in the same directory and clidoc rewrites nothing:
+
+````console
+$ cd /tmp/mydocs && clidoc run --id help -- node -e "console.log('hello from my cli')"
+recorded help (exit 0)
+rendered 1 block(s) into README.md (no changes)
+````
 
 That is the whole workflow. The README now contains a fenced block with the
 real stdout, and `.clidoc/help.json` holds the snapshot you can review in a PR.
@@ -135,12 +155,13 @@ Options take their value as the next word or after an equals sign:
 
 ### `clidoc run <cmd...>` — record + render in one step
 
-The command you would type 95% of the time.
+The command you would type 95% of the time. Run it again in the quickstart
+directory and there is nothing left to rewrite:
 
 ```console
-$ clidoc run --id help -- node dist/cli.js --help
+$ cd /tmp/mydocs && clidoc run --id help -- node -e "console.log('hello from my cli')"
 recorded help (exit 0)
-rendered 1 block(s) into README.md
+rendered 1 block(s) into README.md (no changes)
 ```
 
 ### `clidoc record <cmd...>` — capture only
@@ -150,7 +171,7 @@ snapshot is rendered into several documents, or when you want to inspect the
 raw capture before committing it.
 
 ```console
-$ clidoc record --id version -- node dist/cli.js --version
+$ cd /tmp/mydocs && clidoc record --id version -- node --version
 recorded version (exit 0)
 ```
 
@@ -186,10 +207,14 @@ before anything runs, so `render --chek` exits `2` and leaves the README
 untouched instead of silently doing a normal (writing) render.
 
 ```console
-$ clidoc render --chek
+$ clidoc render --chek 2>&1 | head -1; echo "exit ${PIPESTATUS[0]}"
 clidoc: unknown option "--chek". Did you mean "--check"?
-[exit code: 2]
+exit 2
 ```
+
+The real message is followed by the whole usage page, all of it on stderr; `head`
+keeps the first line and `${PIPESTATUS[0]}` keeps clidoc's own exit code instead
+of `head`'s.
 
 Options are also declared per command, so a flag the chosen command never reads
 is a usage error instead of a silent no-op. `record` reads the capture flags,
@@ -197,18 +222,18 @@ is a usage error instead of a silent no-op. `record` reads the capture flags,
 `--root`:
 
 ```console
-$ clidoc list --max-lines 5
+$ clidoc list --max-lines 5 2>&1; echo "exit $?"
 clidoc: `list` does not read --max-lines; it applies to record, render and run. Run "clidoc --help" to list the options per command.
-[exit code: 2]
+exit 2
 ```
 The same rule covers positional arguments. Only `run` and `record` have
 somewhere to put one -- they hand it to the child process. `render` and `list` read
 none, so naming one is a usage error instead of a silent drop:
 
 ```console
-$ clidoc list extra.md
+$ clidoc list extra.md 2>&1; echo "exit $?"
 clidoc: list does not take arguments (got "extra.md"). Run "clidoc --help" to list the options per command.
-[exit code: 2]
+exit 2
 ```
 
 `clidoc list -- --weird` gets the same answer: `--` changes what counts as an
@@ -218,10 +243,29 @@ The same applies to `--root` and `--cwd`: if you name a directory that does not
 exist, every command stops with `2` instead of quietly using the default.
 
 ```console
-$ clidoc render --check
-README.md is stale: line 4: README has "hand-written, out of date", snapshot has "$ node dist/cli.js --version"
+$ clidoc render --check --root ./nope 2>&1 | sed 's|points at ".*"|points at "<your directory>"|'; echo "exit ${PIPESTATUS[0]}"
+clidoc: --root points at "<your directory>", which does not exist.
+exit 2
+```
+
+It stops before reading or writing anything, so the message names the directory it
+resolved (the absolute path is the one you ran from).
+
+### Stale, ghost and broken markers
+
+A stale README is exit `1`, not a usage error: the snapshots are fine, the document
+is not. Any scratch directory reproduces it --- record once, then edit the block by
+hand:
+
+```console
+$ rm -rf /tmp/faq-stale && mkdir -p /tmp/faq-stale && cd /tmp/faq-stale
+$ printf '<!-- clidoc:start version -->\nhand-written, out of date\n<!-- clidoc:end version -->\n' > README.md
+$ clidoc record --id version -- node --version
+recorded version (exit 0)
+$ clidoc render --check 2>&1; echo "exit $?"
+README.md is stale: line 2: README has "hand-written, out of date", snapshot has "$ node --version"
 Run "clidoc render" to update it.
-[exit code: 1]
+exit 1
 ```
 
 ### `clidoc list`
@@ -246,9 +290,9 @@ help                     ok       node dist/cli.js --help
 `--version` is a request about the tool, not about the run, so it is answered only at the top level:
 
 ```console
-$ clidoc list --version
+$ clidoc list --version 2>&1; echo "exit $?"
 clidoc: --version is not supported by `list`; it applies to "clidoc --version" on its own.
-[exit code: 2]
+exit 2
 ```
 
 中文：本节四个命令，一句话各自对应上面的英文小节。
@@ -273,28 +317,49 @@ clidoc: --version is not supported by `list`; it applies to "clidoc --version" o
 `record` 读捕获类选项，`render` 读渲染类选项，`run` 两类都读，`list` 只读 `--root`：
 
 ```console
-$ clidoc list --max-lines 5
+$ clidoc list --max-lines 5 2>&1; echo "exit $?"
 clidoc: `list` does not read --max-lines; it applies to record, render and run. Run "clidoc --help" to list the options per command.
-[exit code: 2]
+exit 2
 ```
 位置参数同理：只有 `run` 与 `record` 有地方安放它（交给子进程），
 `render` 与 `list` 一个都不读，点名就是用法错误，而不是悄悄丢掉：
 
 ```console
-$ clidoc list extra.md
+$ clidoc list extra.md 2>&1; echo "exit $?"
 clidoc: list does not take arguments (got "extra.md"). Run "clidoc --help" to list the options per command.
-[exit code: 2]
+exit 2
 ```
 
 同理，`--root` 与 `--cwd` 指向不存在的目录时，
-四个命令都会以 `2` 停下，不会默默退回默认值。
+四个命令都会以 `2` 停下，不会默默退回默认值——而且是在读写任何东西之前就停下，
+报出它解析到的那个绝对路径（随你所在的目录而变）：
+
+```console
+$ clidoc render --check --root ./nope 2>&1 | sed 's|points at ".*"|points at "<your directory>"|'; echo "exit ${PIPESTATUS[0]}"
+clidoc: --root points at "<your directory>", which does not exist.
+exit 2
+```
+
+过期（文档漂移）与上面这些用法错误不是一回事：快照没问题、文档对不上，退出码是 `1`。
+任何空目录都能复现——录一次，再手改一下那段内容：
+
+```console
+$ rm -rf /tmp/faq-stale && mkdir -p /tmp/faq-stale && cd /tmp/faq-stale
+$ printf '<!-- clidoc:start version -->\nhand-written, out of date\n<!-- clidoc:end version -->\n' > README.md
+$ clidoc record --id version -- node --version
+recorded version (exit 0)
+$ clidoc render --check 2>&1; echo "exit $?"
+README.md is stale: line 2: README has "hand-written, out of date", snapshot has "$ node --version"
+Run "clidoc render" to update it.
+exit 1
+```
 
 `--version` 问的是工具本身，不是这次运行，所以只在顶层回答：
 
 ```console
-$ clidoc list --version
+$ clidoc list --version 2>&1; echo "exit $?"
 clidoc: --version is not supported by `list`; it applies to "clidoc --version" on its own.
-[exit code: 2]
+exit 2
 ```
 
 `clidoc list` 列出已录的快照：id、状态，以及当初那条命令。
@@ -315,7 +380,7 @@ wrote demo/app.log (12000 lines, 946.6 KB)
 Everything in this section is reproducible with one command:
 
 ```console
-$ npm run demo && npm run docs && npm run docs:check
+$ npm run demo --silent && npm run docs --silent && npm run docs:check --silent
 wrote demo/app.log (12000 lines, 946.6 KB)
 recorded analyze-log (exit 0)
 recorded help (exit 0)
@@ -624,8 +689,7 @@ has to be lifted out of the step — otherwise `prepack` rebuilds `dist/` and th
 is nothing broken left to find:
 
 ```console
-$ python scripts/extract-workflow-step.py .github/workflows/ci.yml "Smoke test the packed tarball" \
-    --local | sed -n '/^node -e "/,/^"$/p' | sed '1d;$d' > /tmp/contents.cjs
+$ python scripts/extract-workflow-step.py .github/workflows/ci.yml "Smoke test the packed tarball" --local | sed -n '/^node -e "/,/^"$/p' | sed '1d;$d' > /tmp/contents.cjs
 $ mkdir -p /tmp/no-dist && cp package.json README.md LICENSE /tmp/no-dist
 $ cd /tmp/no-dist && npm pack --dry-run --json --ignore-scripts > pack-meta.json && node /tmp/contents.cjs 2>&1; echo "exit $?"
 dist/index.js is missing from the tarball
@@ -700,9 +764,16 @@ Everything between a marker pair is generated. Keep prose outside the markers.
 snapshot with no marker) is an error, exit 2, and both sides are named:
 
 ```console
-$ clidoc render --check
+$ rm -rf /tmp/faq-ghost && mkdir -p /tmp/faq-ghost && cd /tmp/faq-ghost
+$ printf '<!-- clidoc:start version -->\n<!-- clidoc:end version -->\n' > README.md
+$ clidoc record --id version -- node --version
+recorded version (exit 0)
+$ clidoc render
+rendered 1 block(s) into README.md
+$ printf '\n<!-- clidoc:start ghost -->\n<!-- clidoc:end ghost -->\n' >> README.md
+$ clidoc render --check 2>&1; echo "exit $?"
 clidoc: marker(s) with no recorded snapshot: ghost. Fix the markers or pass --allow-missing.
-[exit code: 2]
+exit 2
 ```
 
 `--allow-missing` downgrades that to a `warning:` line, which is handy while you
@@ -710,18 +781,22 @@ are still writing the docs. A **stale** README is the other, happier failure:
 exit 1, and clidoc prints the first line that differs:
 
 ```console
-$ clidoc render --check
-README.md is stale: line 4: README has "hand-written, out of date", snapshot has "$ node dist/cli.js --version"
+$ cd /tmp/faq-stale && clidoc render --check 2>&1; echo "exit $?"
+README.md is stale: line 2: README has "hand-written, out of date", snapshot has "$ node --version"
 Run "clidoc render" to update it.
-[exit code: 1]
+exit 1
 ```
 
 **What does a broken marker look like?** clidoc refuses to guess:
 
 ```console
-$ clidoc render --check
+$ rm -rf /tmp/faq-broken && mkdir -p /tmp/faq-broken && cd /tmp/faq-broken
+$ printf '<!-- clidoc:start version -->\n' > README.md
+$ clidoc record --id version -- node --version
+recorded version (exit 0)
+$ clidoc render --check 2>&1; echo "exit $?"
 clidoc: "clidoc:start version" (line 1) is never closed.
-[exit code: 2]
+exit 2
 ```
 
 **What if my command prints a code fence or clidoc's own markers?** clidoc
