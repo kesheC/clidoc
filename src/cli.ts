@@ -7,6 +7,7 @@ import { ClidocError } from "./errors.js";
 import { createSnapshot } from "./index.js";
 import { DEFAULT_MAX_LINES, DEFAULT_README, renderReadme } from "./render.js";
 import { readAllSnapshots } from "./store.js";
+import { installPipeGuard } from "./pipe.js";
 
 const NAME = "clidoc";
 const VERSION = "0.1.11";
@@ -658,6 +659,8 @@ function isEntryPoint(): boolean {
     return false;
   }
 }
+
+installPipeGuard();
 
 if (isEntryPoint()) {
   main(process.argv.slice(2)).then(
