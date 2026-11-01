@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   snapshots and exited 0, and `clidoc list -- --weird` did the same. Both are
   usage errors now: ``clidoc: list does not take arguments (got "extra.md")``,
   exit 2.
+- **`--flag=value` is accepted for every option that takes a value.** The
+  parser only knew the two-token spelling, so `clidoc list --root=.` answered
+  `unknown option "--root=. Did you mean "--root"?` -- the right guess wrapped in
+  a rejection. The value is split off before the switch, which also means a
+  boolean told a value (`render --check=yes`) is refused instead of quietly
+  ignoring it.
 
 ## [0.1.9] - 2026-11-01
 

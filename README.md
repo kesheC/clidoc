@@ -129,6 +129,10 @@ real stdout, and `.clidoc/help.json` holds the snapshot you can review in a PR.
 
 ## Usage / 用法
 
+Options take their value as the next word or after an equals sign:
+`--root=.` is `--root .`. A boolean option given a value
+(`render --check=yes`) is a usage error, not a silent no-op.
+
 ### `clidoc run <cmd...>` — record + render in one step
 
 The command you would type 95% of the time.

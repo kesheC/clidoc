@@ -288,33 +288,46 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       return value;
     };
 
+    // --flag=value is one token to the shell and two ideas to a reader. Split
+    // it here so every case below still sees the bare flag name; "--root=."
+    // used to be reported as an unknown option.
+    let value = arg;
+    let inline: string | undefined;
+    if (arg.startsWith("--")) {
+      const eq = arg.indexOf("=");
+      if (eq > 2) {
+        value = arg.slice(0, eq);
+        inline = arg.slice(eq + 1);
+      }
+    }
+
     // Remember what was typed before it becomes a value: --cwd, --readme and
     // friends carry defaults, so the parsed value cannot answer "did the user
     // actually ask for this?".
-    if (arg.startsWith("--")) {
-      parsed.given.add(arg);
+    if (value.startsWith("--")) {
+      parsed.given.add(value);
     }
 
-    switch (arg) {
+    switch (value) {
       case "--id":
-        parsed.id = next();
+        parsed.id = inline ?? next();
         break;
       case "--cwd":
-        parsed.cwd = next();
+        parsed.cwd = inline ?? next();
         parsed.cwdGiven = true;
         break;
       case "--root":
-        parsed.root = next();
+        parsed.root = inline ?? next();
         parsed.rootGiven = true;
         break;
       case "--readme":
-        parsed.readme = next();
+        parsed.readme = inline ?? next();
         break;
       case "--timeout":
-        parsed.timeoutMs = parseNumber(arg, next());
+        parsed.timeoutMs = parseNumber(value, inline ?? next());
         break;
       case "--max-lines": {
-        const raw = next();
+        const raw = inline ?? next();
         const value = Number(raw);
         if (!Number.isInteger(value) || value <= 0) {
           throw new ClidocError("usage", `--max-lines needs a positive integer, got ${raw}.`);
@@ -323,7 +336,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       }
       case "--env": {
-        const pair = next();
+        const pair = inline ?? next();
         const eq = pair.indexOf("=");
         if (eq <= 0) {
           throw new ClidocError("usage", `--env expects KEY=VALUE, got "${pair}".`);
@@ -332,18 +345,23 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       }
       case "--check":
+        rejectInline(inline, value);
         parsed.check = true;
         break;
       case "--allow-missing":
+        rejectInline(inline, value);
         parsed.allowMissing = true;
         break;
       case "--no-normalize":
+        rejectInline(inline, value);
         parsed.noNormalize = true;
         break;
       case "--no-raw":
+        rejectInline(inline, value);
         parsed.noRaw = true;
         break;
       case "--stamp":
+        rejectInline(inline, value);
         parsed.stamp = true;
         break;
       default:
@@ -352,7 +370,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         // `render --chek` used to run a destructive render and exit 0.
         // A lone "-" is the conventional stdin placeholder, not an option.
         if (arg.startsWith("-") && arg !== "-") {
-          throw new ClidocError("usage", unknownOptionMessage(arg));
+          throw new ClidocError("usage", unknownOptionMessage(value));
         }
         rest.push(arg);
     }
@@ -362,6 +380,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   parsed.command = rest[0];
   parsed.afterSeparator = afterSeparator;
   return parsed;
+}
+
+/** "--check=yes" is a typo, not a boolean with a value. */
+function rejectInline(inline: string | undefined, flag: string): void {
+  if (inline === undefined) return;
+  throw new ClidocError("usage", `${flag} does not take a value.`);
 }
 
 /**

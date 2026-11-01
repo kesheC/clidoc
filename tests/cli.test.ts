@@ -354,6 +354,28 @@ describe("options a command never reads", () => {
     }
   });
 
+  // --flag=value is one token to the shell; the parser only knew --flag value,
+  // so "--root=." came back as an unknown option.
+  it("accepts the --flag=value spelling", async () => {
+    const run = await cli(["list", "--root=."]);
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("no snapshots recorded yet");
+  });
+
+  it("refuses a value on a boolean flag", async () => {
+    const run = await cli(["render", "--check=yes"]);
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain("--check does not take a value");
+    expect(run.stdout).toBe("");
+  });
+
+  it("still names the offending option when the = spelling is unknown", async () => {
+    const run = await cli(["list", "--bogus=1"]);
+    expect(run.code).toBe(2);
+    expect(run.stderr).toContain('unknown option "--bogus"');
+    expect(run.stderr).not.toContain("bogus=1");
+  });
+
   it("still forwards positionals to the child for run and record", async () => {
     const run = await cli(["record", "--id", "a", "--", "echo", "--help"]);
     expect(run.code).toBe(0);
