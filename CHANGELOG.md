@@ -31,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.js.map`, an empty `dist/` and a leaked `src/`. 17 cases.
 - **Two guards the old test did not have.** The release is re-published with
   `gh release edit --draft=false` before any upload, and the `clidoc` bin is
-  smoke tested from the installed package.
+  smoke tested from the installed package. Neither was asserted at v0.1.7;
+  the third guard, clearing `dist/`, was already covered there and still is.
 
 ## [0.1.7] - 2026-11-01
 
