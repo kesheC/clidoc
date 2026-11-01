@@ -41,7 +41,7 @@ release here ships a tarball you can install directly:
 ```console
 $ npm install -g https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ clidoc --version
-0.1.7
+0.1.8
 ```
 
 Every release publishes the same tarball under a stable name (`clidoc.tgz`) alongside a
@@ -61,7 +61,7 @@ Or as a project dev dependency:
 ```console
 $ npm install -D https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ npx clidoc --version
-0.1.7
+0.1.8
 ```
 
 Or build it from a checkout:
@@ -70,7 +70,7 @@ Or build it from a checkout:
 $ git clone https://github.com/kesheC/clidoc.git && cd clidoc
 $ npm ci && npm run build && npm link
 $ clidoc --version
-0.1.7
+0.1.8
 ```
 
 **Zero runtime dependencies** — Node.js `>=20.11` stdlib only (`node:child_process`,
@@ -398,13 +398,13 @@ TARBALL="${{ steps.pack.outputs.tarball }}"
 ```
 
 **1. The tag gate.** Releases are tag-driven, so the tag is the only thing naming
-the version. Without a gate, a `v0.1.7` tag on a `0.1.6` tree uploads 0.1.6
-assets under a 0.1.7 label. Running the real extracted body with a drifted tag
+the version. Without a gate, a `v0.1.9` tag on a `0.1.8` tree uploads 0.1.8
+assets under a 0.1.9 label. Running the real extracted body with a drifted tag
 stops before the first `gh` call — `RELEASE_NOTES.md` is never even written:
 
 ```console
-$ TAG=v0.1.8 bash publish.sh
-tag/version mismatch: tag says 0.1.8, package.json says 0.1.7
+$ TAG=v0.1.9 bash publish.sh
+tag/version mismatch: tag says 0.1.9, package.json says 0.1.8
 exit 1
 notes: not written
 ```
@@ -413,8 +413,8 @@ With a matching tag the gate passes and the next step proceeds — here it is a
 `gh` call that fails only because this local run used a dummy token:
 
 ```console
-$ TAG=v0.1.7 bash publish.sh
-tag v0.1.7 matches package.json version 0.1.7
+$ TAG=v0.1.8 bash publish.sh
+tag v0.1.8 matches package.json version 0.1.8
 HTTP 401: Bad credentials (https://api.github.com/repos/kesheC/clidoc/releases)
 exit 1
 ```
@@ -427,7 +427,7 @@ the real repo:
 ```console
 $ bash smoke.sh | grep -E "package contents ok|clidoc --version =|library import ok"
 package contents ok: 21 entries, 18 under dist/
-clidoc --version = 0.1.7 (expected 0.1.7)
+clidoc --version = 0.1.8 (expected 0.1.8)
 library import ok, 28 exports
 exit 0
 ```
@@ -459,7 +459,10 @@ $ npm run build && npm pack --dry-run --json
 **4. Those snippets are themselves tested.** `tests/workflow.test.ts` extracts the
 real `node -e` bodies out of the YAML and runs them against fixture manifests,
 positive and negative, so a typo in the workflow fails on a laptop instead of on
-release day. 15 cases.
+release day. It also pins the parts that are easy to lose in a rewrite: the
+release is re-published with `gh release edit --draft=false` before any upload,
+every `bin` in `package.json` is smoke tested, and `npm run build` still clears
+`dist/` first. 17 cases.
 
 中文：发布链路上有两道闸门，都只在打 tag 时才执行，所以最容易写错也最难当场发现。
 第一道比对 tag 与 `package.json` 的版本，不一致就在任何 `gh` 调用之前退出 1，
