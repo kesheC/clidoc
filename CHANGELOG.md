@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-11-01
+
 ### Fixed
 
 - **A command that reads no arguments now rejects the ones it was given.**
@@ -22,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a rejection. The value is split off before the switch, which also means a
   boolean told a value (`render --check=yes`) is refused instead of quietly
   ignoring it.
+
+### Quality
+
+- 171 tests across 10 spec files, 1,813 lines of TypeScript.
+- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- Zero runtime dependencies.
 
 ## [0.1.9] - 2026-11-01
 
@@ -229,7 +237,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix: Ubuntu and Windows, Node 20 and 22.
 - Zero runtime dependencies.
 
-[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/kesheC/clidoc/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/kesheC/clidoc/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kesheC/clidoc/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kesheC/clidoc/compare/v0.1.6...v0.1.7
