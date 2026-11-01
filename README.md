@@ -81,6 +81,23 @@ $ clidoc --version
 > `devDependencies`, so there is no `tsc` to build it with. Use the tarball, or
 > clone and build it yourself.
 
+中文：clidoc **没有发布到 npm 官方源**——`clidoc` 这个包名属于另一位作者的
+[`Figmusk/clidoc`](https://github.com/Figmusk/clidoc)。所以每个 release 都附带一份可以直接
+安装的 tarball：上面三段分别是全局安装、作为项目 devDependency，以及从仓库自己构建，
+装完之后 `clidoc --version` 应当输出 `0.1.8`。
+
+每次发布都在固定文件名 `clidoc.tgz` 下上传同一份 tarball，并附 `clidoc.tgz.sha256` 校验和；
+想在安装前先校验，就用上面那两条 `curl` 把两个文件下载下来，Linux 上跑
+`sha256sum -c clidoc.tgz.sha256`，macOS 默认没有 `sha256sum`，改用
+`shasum -a 256 -c clidoc.tgz.sha256`，看到 `clidoc.tgz: OK` 再去安装。
+
+**运行时依赖为 0**：只用到 Node.js `>=20.11` 的标准库（`node:child_process`、`node:fs`、
+`node:path`），没有第三方代码要审计，也不会因为升了一次 lockfile 就崩。
+
+注意：直接从 git 装（`npm install -g git+https://github.com/...`）是**不行**的。
+仓库里没有构建产物，而全局安装会跳过 `devDependencies`，也就没有 `tsc` 去编译它。
+请用 tarball，或者 clone 下来自己 build。
+
 ## Quick start / 60 秒上手
 
 Put a pair of markers anywhere in your README:
@@ -101,6 +118,14 @@ rendered 1 block(s) into README.md
 
 That is the whole workflow. The README now contains a fenced block with the
 real stdout, and `.clidoc/help.json` holds the snapshot you can review in a PR.
+
+中文：在 README 里随便找一处放一对 marker：`<!-- clidoc:start help -->` 与
+`<!-- clidoc:end help -->`，中间先写点占位内容也无所谓。然后用 clidoc 跑一遍要记录的命令，
+也就是上面那条 `clidoc run --id help -- node dist/cli.js --help`：它真的执行命令，把结果写进
+`.clidoc/help.json`，再把这一对 marker 之间的内容替换成一行 `$ 命令行` 加一个 `console` 代码块，
+终端打印 `recorded help (exit 0)` 与 `rendered 1 block(s) into README.md`。
+整条工作流就这么多——README 里从此是真实输出，而 `.clidoc/help.json` 是一份能在 code review
+里逐行看的快照。
 
 ## Usage / 用法
 
@@ -190,6 +215,29 @@ help                     ok       node dist/cli.js --help
   }
 }
 ```
+
+中文：本节四个命令，一句话各自对应上面的英文小节。
+
+`clidoc run` 是最常用的那条：录一次、顺手渲染进 README，等于 `record` + `render`。
+
+`clidoc record` 只录不渲染——只写 `.clidoc/<id>.json`，README 一个字都不动。同一份快照要渲染进
+多份文档，或者你想先看看原始捕获再决定要不要提交时，用它。选项是 `--id`、`--root`、`--cwd`、
+`--timeout`、`--env K=V`、`--no-normalize`、`--no-raw`、`--stamp`。其中 `--root` 决定 `.clidoc/`
+与 README 的位置（默认当前目录），`--cwd` 只决定**子进程**在哪个目录里跑，两者是故意分开的：
+`--cwd packages/api` 不会把快照散落到 `packages/api/.clidoc` 去。
+
+`clidoc render` 把已有快照写回 README 的 marker 之间，选项是 `--readme`（默认 `README.md`）、
+`--max-lines`（默认 40）、`--check`、`--allow-missing`。
+
+`clidoc render --check` 是 CI 闸门：README 与快照一致时退出码 `0`；过期（文档漂移）时退出码 `1`
+并打印第一处不同的行；其它问题——marker 坏了、缺快照——一律 `2`。选项拼错**绝不可能**让闸门变绿：
+未知选项在真正执行之前就被拒绝，所以 `render --chek` 是退出 `2` 且 README 原封不动，
+而不是悄悄退化成一次会写盘的正常 render。同理，`--root` 与 `--cwd` 指向不存在的目录时，
+四个命令都会以 `2` 停下，不会默默退回默认值。
+
+`clidoc list` 列出已录的快照：id、状态，以及当初那条命令。
+
+最后那一小块是把它挂进 `package.json` 的写法：`docs` 负责录，`docs:check` 负责在 CI 里卡漂移。
 
 ## Real-world demo / 真实演示
 
@@ -307,6 +355,20 @@ Examples:
 
 <!-- clidoc:end help -->
 
+中文：这一节的全部内容，一条命令就能复现：`npm run demo && npm run docs && npm run docs:check`
+（生成日志 → 录制并渲染 → 校验）。输入是**真的生成出来的 12,000 行应用日志**（946.6 KB）；
+日志本身不入库（它是构建产物），但仓库里带着生成脚本，同一个种子保证每个读者拿到逐字节一样的数据。
+`rendered` 第二次运行会打印 `(no changes)`，而上面输出里省略了 Windows 下 npm 的那几行横幅，
+中间的文字是逐字照抄的。
+
+`demo/analyze-log.mjs` 负责统计这份日志。把它下面的「原始运行」和「README 里实际得到的那块」比一比：
+clidoc 把 wall-clock 时间戳换成了 `<timestamp>`、把每个延迟换成了 `<duration>`，而计数、HTTP 状态码、
+错误率原样保留。这就是全部把戏——会变的消失，读者真正关心的数据留下。
+
+再往下两块，一块是 12,000 行日志的真实统计结果，一块是 clidoc 用自己的 `--help` 录给自己的输出
+（自举：`clidoc run --id help -- node dist/cli.js --help`）。这两块之间的内容是 clidoc 生成的，
+不要手改；改了就 `render --check` 变红。
+
 ## How it works / 实现要点
 
 1. **`record`** spawns the command with `node:child_process.spawn` — never a
@@ -327,6 +389,24 @@ Examples:
 Snapshots are plain JSON (`stdout`, `stderr`, the raw variants, the argv, the
 exit code and the pinned env), so a docs change shows up as a readable diff in
 code review instead of an opaque binary blob.
+
+中文：三步。
+
+一，**`record`** 用 `node:child_process.spawn` 起进程——从不经过 shell，所以没有注入面——
+并在一个钉死的环境里跑（`COLUMNS=80`、`TZ=UTC`、`LANG=C.UTF-8`、`NO_COLOR=1`），
+同时把 `CI`、`FORCE_COLOR`、`CLICOLOR` 这些变量抹掉；超时到点用 `SIGKILL` 杀子进程。
+
+二，**`normalize`** 对 stdout 与 stderr 跑一条固定的 13 条规则链：ANSI 转义、CRLF、行尾空白、
+`PATH` 形状的值 → `<path>`、工作目录 → `.`、家目录 → `~`、Windows 路径分隔符、
+ISO 时间戳 → `<timestamp>`、`HH:MM:SS` → `<time>`、UUID 与长十六进制 → `<id>`、
+时长 → `<duration>`、字节大小 → `<size>`。规则彼此独立，单次调用可以被关掉。
+
+三，**`render`** 找出每一对 `<!-- clidoc:start id -->` 与 `<!-- clidoc:end id -->`，生成
+`$ 命令行` 加一个 `console` 代码块（超过 `--max-lines` 就截断），并**自下而上**拼接回去，
+这样前面的替换不会让后面的行号失效。
+
+快照就是普通 JSON（`stdout`、`stderr`、各自的原始版本、argv、退出码，以及那份钉死的 env），
+所以一次文档改动在 code review 里是一条能读的 diff，而不是一块看不懂的二进制。
 
 ## API
 
@@ -371,6 +451,17 @@ const markdown = renderSnapshot({
 The library never reads `process.argv` and never calls `process.exit`; that
 lives in `src/cli.ts` only.
 
+中文：第一块是包对外导出的八个函数——`createSnapshot` 跑命令、归一化、写 `.clidoc/<id>.json`；
+`normalizeOutput` 返回 `{ text, changes }`；`runAndCapture` 只跑命令并返回结果；
+`renderReadme` 渲染整份 README；`renderSnapshot` 把单个快照渲染成 Markdown 片段；
+`findBlocks` 解析 marker；`replaceBlocks` 替换块内容；`readAllSnapshots` 读出全部快照。
+
+第二块是用法示例：`normalizeOutput("built at 2025-04-30T08:00:00Z in 12ms", ...)` 返回的 `text`
+是 `built at <timestamp> in <duration>`，`changes` 记录了哪条规则命中了几次；`renderSnapshot`
+拿到一个快照对象，返回 `$ node --version` 加一个 `console` 代码块。
+
+库本身从不读 `process.argv`、从不调 `process.exit`——那些只存在于 `src/cli.ts`。
+
 ## Zero runtime dependencies
 
 ```console
@@ -381,6 +472,11 @@ $ node -e "console.log(Object.keys(require('./package.json').dependencies ?? {})
 Everything ships from `node:child_process`, `node:fs`, `node:path`,
 `node:os` and `node:url`. The only `devDependencies` are TypeScript,
 `@types/node` and Vitest.
+
+中文：`package.json` 的 `dependencies` 是空的，上面那条 `node -e` 打印 `0` 就是证明。
+代码只用到 `node:child_process`、`node:fs`、`node:path`、`node:os`、`node:url` 五个标准库模块；
+`devDependencies` 也只有 TypeScript、`@types/node` 和 Vitest 三项。没有可审计的第三方代码，
+也没有会因为 lockfile 升级而改变的运行时。
 
 ## Release pipeline / 发布链路
 
@@ -557,12 +653,70 @@ The full rule list is `NORMALIZER_NAMES`, exported from `clidoc`:
 `ansi`, `lineEndings`, `trailingWhitespace`, `pathList`, `cwd`, `home`,
 `pathSeparators`, `isoTimestamp`, `dateTime`, `uuid`, `hexId`, `duration`, `size`.
 
+中文：这一节按问题逐条对应上面的英文回答。
+
+**会不会执行 shell？** 不会。`spawn` 带的是 `shell: false`，所以
+`clidoc run -- echo "a; rm -rf /"` 里的分号只是普通字符，原样传给 `echo`。
+真要用管道、通配符这类 shell 特性，自己写成 `bash -c '...'`，此时 argv 就是
+`["bash", "-c", "..."]`。
+
+**命令输出不确定怎么办？** 这正是归一化存在的理由。如果某个值仍然在抖，先用 `--no-normalize`
+录一次看原文，然后补一条你需要的规则（或者传 `disable`），而不是手改快照。
+
+**marker 之间我手写的内容会被删掉吗？** 会。一对 marker 之间的内容全部由 clidoc 生成，
+散文请写在 marker 外面。
+
+**marker 与快照对不上呢？** 有 marker 没快照（或反过来）是错误，退出码 `2`，并且两侧都点名：
+`clidoc: marker(s) with no recorded snapshot: ghost. Fix the markers or pass --allow-missing.`
+加 `--allow-missing` 会把它降级成一行 `warning:`，文档还没写完时很有用。另一种「更好的失败」是
+README **过期**：退出码 `1`，并打印第一处不同的行。marker 本身写坏（比如只有 start 没有 end）时
+clidoc 不猜，直接报 `"clidoc:start version" (line 1) is never closed.` 并以 `2` 退出。
+
+**命令输出里带代码围栏、或者带 clidoc 自己的 marker 呢？** clidoc 不会把自己弄坏。正文里出现连续
+反引号时，它改用更长的围栏（` ````console ` 而不是 ` ```console `）；输出里出现
+`<!-- clidoc:start` 会被写成 `&lt;!-- clidoc:start`，永远成不了真 marker。兜底还有一层：
+`record`/`run` 在写盘之前会把自己即将写入的 README 重新解析一遍，解析不过就以退出码 `2` 中止，
+不会写出 clidoc 自己都读不回来的 README。
+
+**被录的命令能读 stdin 吗？** 不能。子进程用 `stdio: ["ignore", "pipe", "pipe"]` 起，stdin 是
+`/dev/null`，所以那些只有喂了输入才有输出的命令会录到空正文。
+
+**被录的命令能看到我的环境变量吗？** 只看到一份很小的白名单（`PATH`、`HOME`、`TMPDIR`，
+Windows 上还有 `SystemRoot` 等），加上 `--env K=V` 给的键值对，颜色与 CI 相关变量会被抹掉。
+`--env` 的值会原样写进 JSON 快照，所以键名看起来像密钥时 clidoc 会警告。
+
+**Windows 上能用吗？** 能，它就是在 Windows 上开发的。`spawn` 不经过 shell，路径全走 `node:path`。
+换行也处理了：clidoc 会看你的 README 用的是 LF 还是 CRLF，并按同样风格写回，所以
+`core.autocrlf=true` 的检出不会出现假的 `--check` 失败（何况 `.gitattributes` 已把 `eol=lf` 钉死，
+CI 与全新 clone 看到的是同样的字节）。
+
+**除了 README 还会改别的文件吗？** 不会。`record`/`run` 只往 `.clidoc/` 加一个 JSON 文件，
+`render` 只写 `--readme` 指定的那个文件。
+
+**选项拼错了呢？** 退出 `2`，并给出最接近的真实选项
+（`unknown option "--chek". Did you mean "--check"?`）。它从不猜，也从不带着一个你没写全的 flag
+去执行命令——一个会悄悄退化成「会写盘的 render」的 CI 闸门，比红着还糟。
+
+**什么不会被归一化？** 计数、退出码、版本号，以及任何对一个 commit 来说稳定的值。注意上面演示里
+那个取舍：`240ms` 会变成 `<duration>`，因为延迟在不同机器上本来就会变，所以 README 展示的是数据的
+形状（`p95=<duration>`），而不是一个在慢一点的 CI 机器上就会让 `--check` 变红的数字。真要把数字写进
+文档，就只打印稳定的那部分，或者对那块用 `--no-normalize` 录，把会变的部分放到 benchmark 文件里。
+
+完整的规则清单是从 `clidoc` 导出的 `NORMALIZER_NAMES`：`ansi`、`lineEndings`、
+`trailingWhitespace`、`pathList`、`cwd`、`home`、`pathSeparators`、`isoTimestamp`、`dateTime`、
+`uuid`、`hexId`、`duration`、`size`。
+
 ## Security and changes / 安全与变更
 
 Found a vulnerability? Please do not open a public issue — [SECURITY.md](SECURITY.md)
 explains the private reporting channel and what to include. Every release is written
 up in [CHANGELOG.md](CHANGELOG.md).
 
+中文：发现安全问题请不要开公开 issue——[SECURITY.md](SECURITY.md) 说明了私下上报的渠道，
+以及报告里需要写清哪些信息。每一次发布都会记录在 [CHANGELOG.md](CHANGELOG.md)。
+
 ## License
 
 MIT © 2026 kesheC — see [LICENSE](LICENSE).
+
+中文：MIT 许可，版权归 2026 kesheC 所有，详见 [LICENSE](LICENSE)。
