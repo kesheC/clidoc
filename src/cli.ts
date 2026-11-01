@@ -19,25 +19,30 @@ Usage:
   ${NAME} render                   write .clidoc/*.json into README markers
   ${NAME} list                     list recorded snapshots
 
-Options (record / run):
+Options (record only):
   --id <name>          snapshot id (default: derived from the command)
-  --cwd <dir>          directory to run the command in (default: .)
-  --root <dir>         project root holding .clidoc/ (default: .)
+  --cwd <dir>          directory the command runs in (default: .)
   --timeout <ms>       kill the command after N ms (default: 15000)
   --env <K=V>          extra environment variable, repeatable
   --no-normalize       keep raw output (no path/time/id rewriting)
   --no-raw             drop stdoutRaw/stderrRaw from the snapshot file
   --stamp              store durationMs and recordedAt too
 
-Options (render / run):
+Options (render only):
   --readme <file>      README to update (default: ${DEFAULT_README})
   --check              compare only, exit 1 when the README is stale
-  --max-lines <n>      truncate code blocks after N lines (default: ${DEFAULT_MAX_LINES})
   --allow-missing      tolerate snapshots without markers and vice versa
 
-Global:
+Options (record and render, so also run):
+  --max-lines <n>      truncate code blocks after N lines (default: ${DEFAULT_MAX_LINES})
+
+Global (every command):
+  --root <dir>         project root holding .clidoc/ (default: .)
   -h, --help           show this help
   -v, --version        print the version
+
+An option the chosen command does not read is a usage error (exit 2) rather
+than a silent no-op: \`clidoc list --max-lines 5\` is rejected, not ignored.
 
 README markers:
   <!-- clidoc:start <id> -->
@@ -134,6 +139,63 @@ function suggestOption(arg: string): string | undefined {
   return best;
 }
 
+/**
+ * The options each command actually reads, verified against the code rather
+ * than against the help text: --cwd only ever reaches resolveChildCwd() from
+ * commandRecord(), --readme/--check/--allow-missing only reach renderReadme(),
+ * and commandList() reads nothing but the root.
+ *
+ * The parser stays command-agnostic on purpose; this table is the second gate
+ * that stops `list --max-lines 5` from looking like it did something.
+ */
+const COMMON_OPTIONS = ["--root", "--help", "--version"] as const;
+
+const RECORD_OPTIONS: readonly string[] = [
+  ...COMMON_OPTIONS,
+  "--id",
+  "--cwd",
+  "--timeout",
+  "--env",
+  "--no-normalize",
+  "--no-raw",
+  "--stamp",
+  "--max-lines",
+];
+
+const RENDER_OPTIONS: readonly string[] = [
+  ...COMMON_OPTIONS,
+  "--readme",
+  "--check",
+  "--allow-missing",
+  "--max-lines",
+];
+
+/** Commands, in help order, and the options each one really consumes. */
+const COMMAND_OPTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["run", new Set<string>([...RECORD_OPTIONS, ...RENDER_OPTIONS])],
+  ["record", new Set<string>(RECORD_OPTIONS)],
+  ["render", new Set<string>(RENDER_OPTIONS)],
+  ["list", new Set<string>(COMMON_OPTIONS)],
+]);
+
+/** "record", "record and run", "record, render and run". */
+function formatCommandList(commands: readonly string[]): string {
+  if (commands.length <= 1) return commands[0] ?? "";
+  return `${commands.slice(0, -1).join(", ")} and ${commands[commands.length - 1] as string}`;
+}
+
+/** Reading order for prose: the narrow commands first, "run" as the union last. */
+const COMMAND_ORDER = ["record", "render", "run", "list"] as const;
+
+/** Which commands do read the option; used to keep the error actionable. */
+function commandsReading(option: string): string[] {
+  const readers: string[] = [];
+  for (const command of COMMAND_ORDER) {
+    if (COMMAND_OPTIONS.get(command)?.has(option) === true) readers.push(command);
+  }
+  return readers;
+}
+
 interface ParsedArgs {
   command: string | undefined;
   target: string[];
@@ -158,6 +220,8 @@ interface ParsedArgs {
   /** The user actually typed --root / --cwd (as opposed to the defaults). */
   rootGiven: boolean;
   cwdGiven: boolean;
+  /** Every long option the user actually typed, so each command can reject it. */
+  given: Set<string>;
 }
 
 function parseNumber(flag: string, raw: string | undefined): number {
@@ -189,6 +253,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     afterSeparator: false,
     rootGiven: false,
     cwdGiven: false,
+    given: new Set<string>(),
   };
 
   const rest: string[] = [];
@@ -218,6 +283,13 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       index += 1;
       return value;
     };
+
+    // Remember what was typed before it becomes a value: --cwd, --readme and
+    // friends carry defaults, so the parsed value cannot answer "did the user
+    // actually ask for this?".
+    if (arg.startsWith("--")) {
+      parsed.given.add(arg);
+    }
 
     switch (arg) {
       case "--id":
@@ -289,6 +361,27 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
+ * Reject an option the chosen command never reads. Silently dropping it is the
+ * worst outcome: `render --id nope` used to render every block and exit 0, so
+ * a typo looked exactly like a success. Unknown commands fall through to the
+ * dispatch switch so their suggestion is the one the user sees.
+ */
+function assertOptionsUsedByCommand(args: ParsedArgs): void {
+  if (args.command === undefined) return;
+  const accepted = COMMAND_OPTIONS.get(args.command);
+  if (accepted === undefined) return;
+  for (const option of args.given) {
+    if (accepted.has(option) || option === "--help" || option === "--version") continue;
+    const readers = commandsReading(option);
+    const applies = readers.length > 0 ? `; it applies to ${formatCommandList(readers)}` : "";
+    throw new ClidocError(
+      "usage",
+      `\`${args.command}\` does not read ${option}${applies}. Run "${NAME} --help" to list the options per command.`,
+    );
+  }
+}
+
+/**
  * A directory option must point at a directory that exists. Without this,
  * `render --check --root C:/nope` reported "no snapshots" (exit 2 only by
  * luck) and any command with a typo'd --cwd looked like a passing run.
@@ -330,11 +423,6 @@ function warnAboutEnv(args: ParsedArgs): void {
         `warning: --env ${key} looks secret and will be written verbatim into README.md.\n`,
       );
     }
-  }
-  if (args.readme !== DEFAULT_README) {
-    process.stderr.write(
-      `warning: --readme is ignored by "record"; it only applies when rendering.\n`,
-    );
   }
 }
 
@@ -452,6 +540,10 @@ ${USAGE}`);
   }
 
   try {
+    // Options are parsed command-agnostically; reject the ones this command
+    // never reads before any of them can look like they took effect.
+    assertOptionsUsedByCommand(args);
+
     // Validate the directories the user actually named, for every command.
     // Only checking them where they are used is how `render --cwd <typo>` used
     // to succeed while doing nothing with the flag.

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An option a command never reads is now a usage error.** The parser accepted
+  every flag on every command and then ignored the ones the chosen command did
+  not consult, so `render --cwd packages/api` rendered the root tree, `list
+  --readme OTHER.md` listed the wrong file's store, and `record --check`
+  recorded instead of checking -- each one printing a normal success message.
+  Options are now declared per command (`run` reads the union of `record` and
+  `render`; `list` reads only `--root`), and a flag outside the table exits 2
+  with the commands that do read it. `--help` prints the same four groups.
+
 ## [0.1.8] - 2026-11-01
 
 ### Added
@@ -18,9 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prerelease tags, and ordered before the CHANGELOG lookup and before any `gh`
   call; the package-contents assertion against a complete manifest, a stray
   `.js.map`, an empty `dist/` and a leaked `src/`. 17 cases.
-- **Three guards the old test did not have.** The release is re-published with
-  `gh release edit --draft=false` before any upload, the `clidoc` bin is smoke
-  tested, and the build clears `dist/` first.
+- **Two guards the old test did not have.** The release is re-published with
+  `gh release edit --draft=false` before any upload, and the `clidoc` bin is
+  smoke tested from the installed package.
+
 ## [0.1.7] - 2026-11-01
 
 ### Fixed
@@ -180,7 +192,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix: Ubuntu and Windows, Node 20 and 22.
 - Zero runtime dependencies.
 
-[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/kesheC/clidoc/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/kesheC/clidoc/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kesheC/clidoc/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/kesheC/clidoc/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/kesheC/clidoc/compare/v0.1.3...v0.1.4

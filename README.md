@@ -187,6 +187,17 @@ clidoc: unknown option "--chek". Did you mean "--check"?
 [exit code: 2]
 ```
 
+Options are also declared per command, so a flag the chosen command never reads
+is a usage error instead of a silent no-op. `record` reads the capture flags,
+`render` reads the rendering flags, `run` reads both, and `list` reads only
+`--root`:
+
+```console
+$ clidoc list --max-lines 5
+clidoc: `list` does not read --max-lines; it applies to record, render and run. Run "clidoc --help" to list the options per command.
+[exit code: 2]
+```
+
 The same applies to `--root` and `--cwd`: if you name a directory that does not
 exist, every command stops with `2` instead of quietly using the default.
 
@@ -232,7 +243,18 @@ help                     ok       node dist/cli.js --help
 `clidoc render --check` 是 CI 闸门：README 与快照一致时退出码 `0`；过期（文档漂移）时退出码 `1`
 并打印第一处不同的行；其它问题——marker 坏了、缺快照——一律 `2`。选项拼错**绝不可能**让闸门变绿：
 未知选项在真正执行之前就被拒绝，所以 `render --chek` 是退出 `2` 且 README 原封不动，
-而不是悄悄退化成一次会写盘的正常 render。同理，`--root` 与 `--cwd` 指向不存在的目录时，
+而不是悄悄退化成一次会写盘的正常 render。
+
+选项还是**按命令**声明的：某个命令根本不读的选项是用法错误（退出 `2`），而不是悄悄吞掉。
+`record` 读捕获类选项，`render` 读渲染类选项，`run` 两类都读，`list` 只读 `--root`：
+
+```console
+$ clidoc list --max-lines 5
+clidoc: `list` does not read --max-lines; it applies to record, render and run. Run "clidoc --help" to list the options per command.
+[exit code: 2]
+```
+
+同理，`--root` 与 `--cwd` 指向不存在的目录时，
 四个命令都会以 `2` 停下，不会默默退回默认值。
 
 `clidoc list` 列出已录的快照：id、状态，以及当初那条命令。
@@ -315,25 +337,30 @@ Usage:
   clidoc render                   write .clidoc/*.json into README markers
   clidoc list                     list recorded snapshots
 
-Options (record / run):
+Options (record only):
   --id <name>          snapshot id (default: derived from the command)
-  --cwd <dir>          directory to run the command in (default: .)
-  --root <dir>         project root holding .clidoc/ (default: .)
+  --cwd <dir>          directory the command runs in (default: .)
   --timeout <ms>       kill the command after N ms (default: 15000)
   --env <K=V>          extra environment variable, repeatable
   --no-normalize       keep raw output (no path/time/id rewriting)
   --no-raw             drop stdoutRaw/stderrRaw from the snapshot file
   --stamp              store durationMs and recordedAt too
 
-Options (render / run):
+Options (render only):
   --readme <file>      README to update (default: README.md)
   --check              compare only, exit 1 when the README is stale
-  --max-lines <n>      truncate code blocks after N lines (default: 40)
   --allow-missing      tolerate snapshots without markers and vice versa
 
-Global:
+Options (record and render, so also run):
+  --max-lines <n>      truncate code blocks after N lines (default: 40)
+
+Global (every command):
+  --root <dir>         project root holding .clidoc/ (default: .)
   -h, --help           show this help
   -v, --version        print the version
+
+An option the chosen command does not read is a usage error (exit 2) rather
+than a silent no-op: `clidoc list --max-lines 5` is rejected, not ignored.
 
 README markers:
   &lt;!-- clidoc:start <id> -->
