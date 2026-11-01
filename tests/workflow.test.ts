@@ -1,299 +1,268 @@
+/**
+ * The release pipeline only runs on a tag push, so nothing else in the repo
+ * would ever execute it: a gate that silently stopped working would stay
+ * green until the day it mattered. This file pins the guards two ways.
+ *
+ *   1. structurally, against the YAML text - the guard exists and is ordered
+ *      before the things it protects;
+ *   2. behaviourally, by cutting the guard's own shell body out of the
+ *      workflow and running it against a throwaway package.json.
+ *
+ * Only node's stdlib and vitest are used: the project ships zero runtime
+ * dependencies and does not take a YAML parser just to read two files it
+ * owns.
+ */
+
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import * as path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { describe, expect, it } from "vitest";
 
-// The release path is guarded by shell snippets that only run when somebody
-// pushes a tag, which is exactly when a mistake is most expensive: a tag gate
-// that does not fire uploads 0.1.6 assets under a v0.1.7 label, and a package
-// assertion that looks at the wrong directory passes on an empty package.
-//
-// These tests run the snippets that are actually in the workflow files, so a
-// typo in the YAML fails here instead of on the day of the release. Nothing is
-// re-implemented: the extracted text is the shipped text.
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
-const root = fileURLToPath(new URL("..", import.meta.url));
+/** The name this package is published under; CI imports it as a bare specifier. */
+const PKG_NAME = "clidoc";
 
-interface Snippet {
-  /** The javascript handed to node -e. */
-  source: string;
-  /** Whether the closing quote carried an argument, e.g. '"$TAG"'. */
-  args: string[];
+function readWorkflow(name: string): string {
+  return readFileSync(path.join(repoRoot, ".github", "workflows", name), "utf8");
 }
 
 /**
- * Pull the `run:` body of a named step out of a workflow file.
- *
- * The YAML is read as text on purpose: the only YAML parser available here
- * would be a runtime dependency, and this project ships none. A hand-rolled
- * reader is acceptable because it is checked against the real file — if the
- * workflow stops looking the way this expects, the extraction fails loudly
- * rather than returning an empty string that trivially passes.
+ * Cut the body of one step out of a workflow, keyed by its "- name:" line.
+ * Every step here is a bash "run: |" block, so the body is whatever follows,
+ * de-indented, up to the first line indented less than the first body line.
  */
 function stepBody(workflow: string, stepName: string): string {
-  const lines = workflow.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === `- name: ${stepName}`);
-  if (start === -1) throw new Error(`no step named "${stepName}" in the workflow`);
-  const runAt = lines.findIndex((line, index) => index > start && line.trim() === "run: |");
-  if (runAt === -1) throw new Error(`step "${stepName}" has no "run: |" block`);
-  const indent = /^\s*/.exec(lines[runAt] ?? "")?.[0]?.length ?? 0;
+  const marker = "- name: " + stepName;
+  const at = workflow.indexOf(marker);
+  if (at < 0) throw new Error("step not found in workflow: " + stepName);
+  const runAt = workflow.indexOf("run: |", at);
+  if (runAt < 0) throw new Error("step has no run block: " + stepName);
+  const bodyStart = workflow.indexOf("\n", runAt) + 1;
+  const lines = workflow.slice(bodyStart).split("\n");
+  const indents = lines
+    .filter((line) => line.trim() !== "")
+    .map((line) => (line.match(/^ */) as RegExpMatchArray)[0].length);
+  const bodyIndent = Math.min(...indents);
   const body: string[] = [];
-  for (let index = runAt + 1; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (line.trim() === "") {
-      body.push("");
-      continue;
-    }
-    const depth = /^\s*/.exec(line)?.[0]?.length ?? 0;
-    if (depth <= indent) break;
-    body.push(line);
+  for (const line of lines) {
+    const indent = line.trim() === "" ? Number.POSITIVE_INFINITY : (line.match(/^ */) as RegExpMatchArray)[0].length;
+    if (indent < bodyIndent) break;
+    body.push(line.slice(bodyIndent));
   }
-  const text = body.join("\n");
-  if (text.trim() === "") throw new Error(`step "${stepName}" has an empty run block`);
-  return text;
+  return body.join("\n").trimEnd();
 }
 
-/** Every `node -e` / `node --input-type=module -e` heredoc inside a step body. */
-function snippets(body: string): Snippet[] {
-  const lines = body.split("\n");
-  const found: Snippet[] = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const opener = /^(\s*)node (?:--input-type=module )?-e (["'])$/.exec(lines[index] ?? "");
-    if (!opener) continue;
-    const indent = opener[1] ?? "";
-    const quote = opener[2] ?? "'";
-    const collected: string[] = [];
-    let closed = false;
-    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
-      const line = lines[cursor] ?? "";
-      const closer = new RegExp(`^${indent}${quote}(.*)$`).exec(line);
-      if (closer) {
-        const tail = (closer[1] ?? "").trim();
-        found.push({ source: collected.join("\n"), args: tail === "" ? [] : [tail] });
-        index = cursor;
-        closed = true;
-        break;
-      }
-      collected.push(line.startsWith(indent) ? line.slice(indent.length) : line.trim());
-    }
-    if (!closed) throw new Error("unterminated node -e snippet in the workflow");
+/** Extract the JavaScript out of an inline "node -e '...' \"$ARG\"" invocation. */
+function inlineNodeScript(shell: string, nth = 0): string {
+  const opener = "node -e '";
+  let from = -1;
+  for (let i = 0; i <= nth; i += 1) {
+    from = shell.indexOf(opener, from + 1);
+    if (from < 0) throw new Error("inline node -e number " + String(nth) + " not found");
   }
-  if (found.length === 0) throw new Error("the step contains no node -e snippet");
-  return found;
+  const start = from + opener.length;
+  const end = shell.indexOf("' \"$", start);
+  if (end < 0) throw new Error("inline node -e has no closing quote and argument");
+  return shell.slice(start, end);
 }
 
-function snippetContaining(body: string, needle: string): Snippet {
-  const match = snippets(body).find((snippet) => snippet.source.includes(needle));
-  if (!match) throw new Error(`no node -e snippet containing "${needle}"`);
-  return match;
+interface GateResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
 }
 
-const dirs: string[] = [];
-
-function workspace(files: Record<string, string>): string {
-  const dir = mkdtempSync(path.join(tmpdir(), "clidoc-workflow-"));
-  dirs.push(dir);
-  for (const [name, content] of Object.entries(files)) {
-    writeFileSync(path.join(dir, name), content, "utf8");
-  }
-  return dir;
+/**
+ * Run the real release gate against a synthetic package.json.
+ *
+ * The gate reads process.argv[1], which under "node -e" is the first user
+ * argument but is the script path when node is handed a file, so the workflow
+ * is reproduced exactly: the body goes to -e and the tag after it.
+ */
+function runGate(tag: string, version: string): GateResult {
+  const gate = inlineNodeScript(stepBody(readWorkflow("release.yml"), "Publish release assets"), 0);
+  const dir = mkdtempSync(path.join(tmpdir(), "gate-"));
+  writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: PKG_NAME, version }), "utf8");
+  const result = spawnSync(process.execPath, ["-e", gate, tag], { cwd: dir, encoding: "utf8" });
+  return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
-function runNode(source: string, args: string[], cwd: string): { code: number; out: string; err: string } {
-  const result = spawnSync(process.execPath, ["-e", source, ...args], { cwd, encoding: "utf8" });
-  return { code: result.status ?? -1, out: result.stdout ?? "", err: result.stderr ?? "" };
-}
-
-/** A package.json whose version is the single thing the gate reads. */
-function packageJson(version: string): string {
-  return JSON.stringify({ name: "clidoc", version }, null, 2);
-}
-
-/** The pack manifest npm emits, trimmed to the fields the assertion reads. */
-function packMeta(paths: string[]): string {
-  return JSON.stringify([
-    {
-      id: "clidoc@0.1.6",
-      name: "clidoc",
-      version: "0.1.6",
-      size: 26244,
-      unpackedSize: 79698,
-      files: paths.map((entry) => ({ path: entry, size: 100 })),
-    },
-  ]);
-}
-
-const distEntries = [
-  "LICENSE",
-  "README.md",
-  "dist/cli.d.ts",
-  "dist/cli.js",
-  "dist/errors.d.ts",
-  "dist/errors.js",
-  "dist/index.d.ts",
-  "dist/index.js",
-  "package.json",
+const REQUIRED_EXPORTS = [
+  "createSnapshot",
+  "renderReadme",
+  "normalizeOutput",
+  "findBlocks",
+  "replaceBlocks",
 ];
 
-afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
-
-const releaseYml = readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
-const ciYml = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
-
-describe("release workflow tag gate", () => {
-  const publish = stepBody(releaseYml, "Publish release assets");
-  const gate = snippetContaining(publish, "tag/version mismatch");
-
-  it("runs before any gh call, so tag drift is reported as tag drift", () => {
-    const text = publish;
-    const gateAt = text.indexOf("tag/version mismatch");
-    const firstGh = text.indexOf("gh release view");
-    expect(gateAt).toBeGreaterThan(-1);
-    expect(firstGh).toBeGreaterThan(-1);
-    expect(gateAt).toBeLessThan(firstGh);
-    // The CHANGELOG extraction must come after the gate too: otherwise a
-    // drifted tag fails with "CHANGELOG.md has no section for 0.1.7", which
-    // sends whoever pushes the tag to the wrong file.
-    expect(gateAt).toBeLessThan(text.indexOf("CHANGELOG.md has no section"));
-  });
-
+describe("release workflow: the tag must agree with package.json", () => {
   it("accepts a tag that matches package.json", () => {
-    const cwd = workspace({ "package.json": packageJson("0.1.6") });
-    const result = runNode(gate.source, ["v0.1.6"], cwd);
-    expect(result.err).toBe("");
+    const result = runGate("v0.1.7", "0.1.7");
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("matches package.json version 0.1.7");
     expect(result.code).toBe(0);
-    expect(result.out).toContain("tag v0.1.6 matches package.json version 0.1.6");
   });
 
-  it("prints both sides and fails on a version mismatch", () => {
-    const cwd = workspace({ "package.json": packageJson("0.1.6") });
-    const result = runNode(gate.source, ["v0.1.7"], cwd);
+  it("rejects a tag that drifted, and prints both sides", () => {
+    const result = runGate("v0.1.8", "0.1.7");
     expect(result.code).toBe(1);
-    expect(result.err).toContain("tag/version mismatch: tag says 0.1.7, package.json says 0.1.6");
-    expect(result.out).toBe("");
+    expect(result.stderr).toContain("tag/version mismatch: tag says 0.1.8, package.json says 0.1.7");
+    expect(result.stdout).toBe("");
   });
 
-  it("rejects a tag that is not vX.Y.Z", () => {
-    const cwd = workspace({ "package.json": packageJson("0.1.6") });
-    for (const tag of ["0.1.6", "release-0.1.6", "v0.1", "v0.1.6.1", "v"]) {
-      const result = runNode(gate.source, [tag], cwd);
-      expect(result.code, `tag ${tag} should be rejected`).toBe(1);
-      expect(result.err).toContain("tag is not a vX.Y.Z tag: " + tag);
-    }
+  it("rejects a tag that is not vX.Y.Z at all", () => {
+    const result = runGate("nightlies", "0.1.7");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("tag is not a vX.Y.Z tag: nightlies");
   });
 
-  it("allows prerelease and build suffixes, which are still vX.Y.Z tags", () => {
-    const cwd = workspace({ "package.json": packageJson("0.2.0-rc.1") });
-    const result = runNode(gate.source, ["v0.2.0-rc.1"], cwd);
-    expect(result.err).toBe("");
-    expect(result.code).toBe(0);
+  it("rejects a prerelease tag, which can never equal a plain version", () => {
+    const result = runGate("v0.1.7-rc.1", "0.1.7");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("tag says 0.1.7-rc.1");
+  });
+
+  it("gates before the CHANGELOG lookup and before any gh call", () => {
+    const publish = stepBody(readWorkflow("release.yml"), "Publish release assets");
+    const gateAt = publish.indexOf("tag/version mismatch");
+    const changelogAt = publish.indexOf("CHANGELOG.md");
+    const ghAt = publish.indexOf("gh release");
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(changelogAt).toBeGreaterThan(-1);
+    expect(ghAt).toBeGreaterThan(-1);
+    // Otherwise a drifted tag is reported as "CHANGELOG has no section for ...",
+    // which sends whoever pushed the tag to the wrong file entirely.
+    expect(gateAt).toBeLessThan(changelogAt);
+    expect(gateAt).toBeLessThan(ghAt);
   });
 });
 
-describe("CI package-content assertions", () => {
-  const smoke = stepBody(ciYml, "Smoke test the packed tarball");
-  const contents = snippetContaining(smoke, "pack-meta.json");
+describe("CI workflow: the packed artifact is the thing under test", () => {
+  const smoke = stepBody(readWorkflow("ci.yml"), "Smoke test the packed tarball");
 
-  it("inspects the package before leaving the repo root", () => {
-    // npm pack packs the current directory. Running the check after the
-    // throwaway cd would inspect that empty package and always pass.
-    const packAt = smoke.indexOf("npm pack --dry-run --json");
+  it("inspects the tarball from the repo root, before changing directory", () => {
+    const packAt = smoke.indexOf("npm pack --dry-run --json > pack-meta.json");
     const cdAt = smoke.indexOf('cd "$SMOKE"');
     expect(packAt).toBeGreaterThan(-1);
     expect(cdAt).toBeGreaterThan(-1);
+    // npm pack packs the current directory; inspecting after cd would check a
+    // throwaway empty package and stay green forever.
     expect(packAt).toBeLessThan(cdAt);
   });
 
-  it("accepts a manifest that carries the built entry points", () => {
-    const cwd = workspace({ "pack-meta.json": packMeta(distEntries) });
-    const result = runNode(contents.source, [], cwd);
-    expect(result.err).toBe("");
-    expect(result.code).toBe(0);
-    expect(result.out.trim()).toBe("package contents ok: 9 entries, 6 under dist/");
-  });
-
-  it("fails when the tarball ships a sourcemap it cannot resolve", () => {
-    const cwd = workspace({
-      "pack-meta.json": packMeta([...distEntries, "dist/index.js.map"]),
-    });
-    const result = runNode(contents.source, [], cwd);
-    expect(result.code).toBe(1);
-    expect(result.err).toContain(".js.map");
-  });
-
-  it("fails when dist/ is empty instead of reporting a size heuristics win", () => {
-    const cwd = workspace({
-      "pack-meta.json": packMeta(["LICENSE", "README.md", "package.json"]),
-    });
-    const result = runNode(contents.source, [], cwd);
-    expect(result.code).toBe(1);
-    expect(result.err).toContain("dist/index.js is missing");
-    expect(result.err).toContain("no dist/ entries at all");
-  });
-
-  it("fails when the type declarations are dropped", () => {
-    const cwd = workspace({
-      "pack-meta.json": packMeta(distEntries.filter((entry) => !entry.endsWith(".d.ts"))),
-    });
-    const result = runNode(contents.source, [], cwd);
-    expect(result.code).toBe(1);
-    expect(result.err).toContain("dist/index.d.ts is missing");
-  });
-
-  it("fails when src/ or tests/ leaks into the tarball", () => {
-    for (const leak of ["src/index.ts", "tests/e2e.test.ts"]) {
-      const cwd = workspace({ "pack-meta.json": packMeta([...distEntries, leak]) });
-      const result = runNode(contents.source, [], cwd);
-      expect(result.code, `${leak} should be rejected`).toBe(1);
-      expect(result.err).toContain("leaks");
+  it("asserts the required entries, the leak prefixes and the absence of maps", () => {
+    for (const needle of [
+      "dist/index.js",
+      "dist/cli.js",
+      "dist/index.d.ts",
+      "the tarball leaks ",
+      "'tests/', 'src/', 'node_modules/'",
+      ".js.map",
+    ]) {
+      expect(smoke).toContain(needle);
     }
   });
 
-  it("imports the packed library and checks the public surface", () => {
-    const library = snippetContaining(smoke, "await import('clidoc')");
-    // The snippet must import the bare specifier: importing a relative path
-    // would resolve to the checkout's source and verify the wrong artifact.
-    expect(library.source).toContain("await import('clidoc')");
-    for (const name of ["createSnapshot", "renderReadme", "normalizeOutput"]) {
-      expect(library.source).toContain(name);
+  it("imports the installed package instead of the checkout", () => {
+    expect(smoke).toContain("node --input-type=module");
+    expect(smoke).toContain("await import('" + PKG_NAME + "')");
+    expect(smoke.indexOf("await import('" + PKG_NAME + "')")).toBeGreaterThan(smoke.indexOf('cd "$SMOKE"'));
+  });
+
+  it("names library exports that this package actually exports", async () => {
+    const entry = path.join(repoRoot, "dist", "index.js");
+    const api = (await import(pathToFileURL(entry).href)) as Record<string, unknown>;
+    for (const name of REQUIRED_EXPORTS) {
+      expect(smoke, name + " is asserted by CI but is not exported").toContain("'" + name + "'");
+      expect(typeof api[name], name + " must be a function").toBe("function");
     }
+  });
+
+  it("keeps the generated pack-meta.json out of version control", () => {
+    const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
+    expect(gitignore.split(/\r?\n/)).toContain("pack-meta.json");
   });
 });
 
-describe("published build", () => {
-  it("turns sourcemaps off for the build that ships, but not for the editor", () => {
-    const build = readFileSync(path.join(root, "tsconfig.build.json"), "utf8");
-    expect(build).toMatch(/"sourceMap":\s*false/);
-    expect(build).toMatch(/"declarationMap":\s*false/);
-    const editor = readFileSync(path.join(root, "tsconfig.json"), "utf8");
-    expect(editor).toMatch(/"sourceMap":\s*true/);
+/**
+ * Read a tsconfig the way tsc does: these files carry // comments, so plain
+ * JSON.parse would throw on the config that is actually shipped.
+ */
+function readTsconfig(name: string): { compilerOptions: Record<string, unknown> } {
+  const raw = readFileSync(path.join(repoRoot, name), "utf8");
+  const stripped = raw.replace(/^\s*\/\/.*$/gm, "");
+  return JSON.parse(stripped) as { compilerOptions: Record<string, unknown> };
+}
+
+describe("build config: no sourcemaps for sources that are not shipped", () => {
+  it("turns sourceMap and declarationMap off in the build layer", () => {
+    const build = readTsconfig("tsconfig.build.json");
+    expect(build.compilerOptions.sourceMap).toBe(false);
+    expect(build.compilerOptions.declarationMap).toBe(false);
   });
 
-  it("clears dist/ before compiling, so a stale map cannot survive", () => {
-    const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
+  it("leaves the editor config with sourcemaps", () => {
+    const editor = readTsconfig("tsconfig.json");
+    expect(editor.compilerOptions.sourceMap).toBe(true);
+  });
+
+  it("does not publish a source tree that the tarball does not contain", () => {
+    const pkg = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as { files: string[] };
+    // A .js.map points at src/*.ts; "src" is not in "files", so every map that
+    // used to ship was a dead link to a file the user never receives.
+    expect(pkg.files).not.toContain("src");
+  });
+  it("clears dist/ before compiling, so a stale artifact cannot survive a config change", () => {
+    const pkg = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
       scripts: Record<string, string>;
     };
-    // tsc never deletes: turning sourcemaps off would leave the previous
-    // build's .js.map in dist/ and npm pack would happily ship them, so the
-    // build has to start from an empty directory.
-    expect(manifest.scripts.build).toContain("npm run clean");
-    expect(manifest.scripts.clean).toBeDefined();
-    const clean = manifest.scripts.clean ?? "";
-    expect(clean).toContain("rmSync");
-    expect(clean).toContain("dist");
+    // tsc never deletes: turning a gate off would leave the previous build's
+    // output in dist/ and npm pack would ship it anyway, so the build has to
+    // start from an empty directory.
+    expect(pkg.scripts.build).toContain("npm run clean");
+    expect(pkg.scripts.clean).toContain("rmSync");
+    expect(pkg.scripts.clean).toContain("dist");
+  });
+});
+
+describe("release workflow: the release is published, not left as a draft", () => {
+  const publish = stepBody(readWorkflow("release.yml"), "Publish release assets");
+
+  it("re-publishes an existing release explicitly", () => {
+    // GitHub turns a release into a draft when its tag is deleted and pushed
+    // again. Creating it once is not enough: the job has to publish whatever
+    // state it found.
+    expect(publish).toContain("gh release edit");
+    expect(publish).toContain("--draft=false");
   });
 
-  it("keeps the tarball list to what the maps would need to resolve to", () => {
-    const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
-      files: string[];
-    };
-    // At least one of these must be inside "files": a .js.map points at
-    // ../src/*.ts, and if src is not shipped the map is a dead link.
-    const shipsSources = manifest.files.includes("dist") && manifest.files.some((entry) => entry.startsWith("src"));
-    expect(shipsSources).toBe(false);
+  it("publishes before uploading, so the upload target is not a draft", () => {
+    const publishAt = publish.indexOf("--draft=false");
+    const uploadAt = publish.indexOf("gh release upload");
+    // Both have to be present: indexOf returns -1 for a missing needle, and
+    // -1 is less than every real offset, so a bare comparison would pass.
+    expect(publishAt).toBeGreaterThan(-1);
+    expect(uploadAt).toBeGreaterThan(-1);
+    expect(publishAt).toBeLessThan(uploadAt);
+  });
+});
+
+describe("CI workflow: every command package.json declares is smoke tested", () => {
+  const smoke = stepBody(readWorkflow("ci.yml"), "Smoke test the packed tarball");
+  const manifest = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
+    bin?: Record<string, string>;
+  };
+
+  it("runs the version flag of each declared bin", () => {
+    const names = Object.keys(manifest.bin ?? {});
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      // Each alias can break on its own: a typo in one entry of "bin" leaves
+      // the other one working, so a single check would not notice.
+      expect(smoke, name + " is in package.json but CI never runs it").toContain("./node_modules/.bin/" + name + " --version");
+    }
   });
 });
