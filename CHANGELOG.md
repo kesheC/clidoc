@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-11-01
+
+### Added
+
+- **The README is Chinese as well as English.** All twelve sections now carry a
+  Chinese paragraph directly under the English one -- same flags, same
+  transcripts, same release gates. 2,427 CJK characters, up from 257.
+
 ### Fixed
 
 - **An option a command never reads is now a usage error.** The parser accepted
@@ -17,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Options are now declared per command (`run` reads the union of `record` and
   `render`; `list` reads only `--root`), and a flag outside the table exits 2
   with the commands that do read it. `--help` prints the same four groups.
+- **Two FAQ entries had run together**, so the second one rendered as the tail
+  of the first.
+- **The 0.1.8 entry overclaimed.** It listed three guards the old test lacked;
+  clearing `dist/` was already covered at v0.1.7 and still is, and the other two
+  were new. Version headings had no link definitions, so `[0.1.7]` and `[0.1.8]`
+  rendered as literal text, and `[Unreleased]` still compared against v0.1.6.
+
+### Quality
+
+- 166 tests across 10 spec files, 1,765 lines of TypeScript.
+- CI matrix: Ubuntu and Windows, Node 20 and 22.
+- Zero runtime dependencies.
 
 ## [0.1.8] - 2026-11-01
 
@@ -193,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix: Ubuntu and Windows, Node 20 and 22.
 - Zero runtime dependencies.
 
-[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/kesheC/clidoc/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kesheC/clidoc/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kesheC/clidoc/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kesheC/clidoc/compare/v0.1.5...v0.1.6
