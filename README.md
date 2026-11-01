@@ -553,9 +553,13 @@ Everything ships from `node:child_process`, `node:fs`, `node:path`,
 
 A docs tool that publishes a broken tarball is worse than useless, so the release
 path is guarded by `node -e` snippets that run *before* anything is uploaded.
-Because that code only executes on a tag push, it is the easiest thing to have
-subtly wrong — so it is also tested. `scripts/extract-workflow-step.py` prints a
-step body verbatim (`--local` maps the GitHub expressions onto shell variables):
+That code only executes on a tag push, which makes it both the easiest thing to
+have subtly wrong and the hardest to notice — so every guard below is shown with
+the command that actually re-runs it here, not a paraphrase of what it does.
+
+`scripts/extract-workflow-step.py` prints a step body verbatim (`--local` maps the
+GitHub expressions onto shell variables), so the body GitHub runs can be run on a
+laptop:
 
 ```console
 $ python scripts/extract-workflow-step.py .github/workflows/release.yml "Publish release assets" | head -3
@@ -565,46 +569,65 @@ TARBALL="${{ steps.pack.outputs.tarball }}"
 ```
 
 **1. The tag gate.** Releases are tag-driven, so the tag is the only thing naming
-the version. Without a gate, a `v0.1.11` tag on a `0.1.10` tree uploads 0.1.10
-assets under a 0.1.11 label. Running the real extracted body with a drifted tag
-stops before the first `gh` call — `RELEASE_NOTES.md` is never even written:
+the version. Without a gate, a `v0.1.11` tag on a `0.1.12` tree uploads 0.1.12
+assets under a 0.1.11 label. Running the extracted body with a drifted tag stops
+before the first `gh` call — `RELEASE_NOTES.md` is never even written:
 
 ```console
-$ TAG=v0.1.11 bash publish.sh
-tag/version mismatch: tag says 0.1.11, package.json says 0.1.10
+$ python scripts/extract-workflow-step.py .github/workflows/release.yml "Publish release assets" --local > /tmp/publish.sh
+$ TAG=v0.1.11 REPO=kesheC/clidoc bash /tmp/publish.sh 2>&1; echo "exit $?"
+tag/version mismatch: tag says 0.1.11, package.json says 0.1.12
 exit 1
-notes: not written
+$ test -f RELEASE_NOTES.md && echo written || echo "not written"
+not written
 ```
 
-With a matching tag the gate passes and the next step proceeds — here it is a
-`gh` call that fails only because this local run used a dummy token:
+With a matching tag the gate passes and the body proceeds to the release itself.
+Here that is a `gh` call that fails only because the run used a dummy token —
+which is the point: everything local had already passed before any network was
+touched:
 
 ```console
-$ TAG=v0.1.12 bash publish.sh
+$ TAG=v0.1.12 REPO=kesheC/clidoc GH_TOKEN=dummy bash /tmp/publish.sh 2>&1; echo "exit $?"
 tag v0.1.12 matches package.json version 0.1.12
 HTTP 401: Bad credentials (https://api.github.com/repos/kesheC/clidoc/releases)
+Try authenticating with:  gh auth login -h github.com
 exit 1
 ```
+
+`REPO` is part of the contract, not a convenience: the body runs under `set -u`,
+so leaving it out dies with `line 47: REPO: unbound variable` before `gh` is
+reached. The notes are written *before* the upload, so a run that dies at the
+`gh` call leaves a `RELEASE_NOTES.md` behind — it is not tracked, delete it.
 
 **2. Package contents, checked from the repo root.** `npm pack --dry-run --json`
 runs before any `cd`: packing from a throwaway directory would inspect *that*
-empty package and pass forever. The extracted CI smoke step, run locally against
-the real repo:
+empty package and pass forever. The extracted CI smoke step, run against the real
+repo:
 
 ```console
-$ bash smoke.sh | grep -E "package contents ok|clidoc --version =|library import ok"
-package contents ok: 21 entries, 18 under dist/
+$ python scripts/extract-workflow-step.py .github/workflows/ci.yml "Smoke test the packed tarball" --local > /tmp/smoke.sh
+$ GITHUB_WORKSPACE=$PWD bash /tmp/smoke.sh 2>/dev/null | grep -E "package contents ok|clidoc --version =|library import ok"
+package contents ok: 23 entries, 20 under dist/
 clidoc --version = 0.1.12 (expected 0.1.12)
 library import ok, 28 exports
-exit 0
 ```
 
-The same assertion fails loudly on a rotten artifact. Here `npm pack` was pointed
-at a package root that has no `dist/` (`npm pack --dry-run --json --ignore-scripts`,
-so the missing build is not regenerated), and every problem is reported at once:
+`GITHUB_WORKSPACE` has to be exported for a local run — Actions sets it, a laptop
+does not, and without it the body stops at `line 37: GITHUB_WORKSPACE: unbound
+variable`. The `2>/dev/null` only hides `npm pack`'s chatter about the `prepack`
+build.
+
+The same assertion fails loudly on a rotten artifact. Reproducing that locally
+takes two extra pieces: the package root must have no `dist/`, and the assertion
+has to be lifted out of the step — otherwise `prepack` rebuilds `dist/` and there
+is nothing broken left to find:
 
 ```console
-$ node assert.cjs
+$ python scripts/extract-workflow-step.py .github/workflows/ci.yml "Smoke test the packed tarball" \
+    --local | sed -n '/^node -e "/,/^"$/p' | sed '1d;$d' > /tmp/contents.cjs
+$ mkdir -p /tmp/no-dist && cp package.json README.md LICENSE /tmp/no-dist
+$ cd /tmp/no-dist && npm pack --dry-run --json --ignore-scripts > pack-meta.json && node /tmp/contents.cjs 2>&1; echo "exit $?"
 dist/index.js is missing from the tarball
 dist/cli.js is missing from the tarball
 dist/index.d.ts is missing, so the types do not ship
@@ -612,16 +635,28 @@ the tarball has no dist/ entries at all
 exit 1
 ```
 
+Every problem is reported at once instead of one per run. `--ignore-scripts` is
+what stops `npm pack` from reinstating `dist/`; without it this transcript is
+unreproducible, and `pack-meta.json` is read from the *current* directory, which
+is why the throwaway root has to be the working directory.
+
 **3. What the tarball does *not* contain.** The published build turns sourcemaps
 off (`tsconfig.build.json`): the tarball ships only `dist/`, so a `.js.map` would
 point at `src/*.ts` that is not in it. `npm run build` also clears `dist/` first,
 because `tsc` leaves the previous build's files in place — otherwise turning maps
-off would still ship the maps from the last build:
+off would still ship the maps from the last build. Counting them needs the pack
+metadata, not a walk of the filesystem:
 
 ```console
-$ npm run build && npm pack --dry-run --json
-0 sourcemaps, 21 entries in the tarball
+$ npm run build > /dev/null && npm pack --dry-run --json > pack-meta.json 2>/dev/null
+$ node -e "const f = require('./pack-meta.json')[0].files.map((x) => x.path); console.log(f.filter((p) => p.endsWith('.js.map')).length + ' sourcemaps, ' + f.length + ' entries in the tarball')"
+0 sourcemaps, 23 entries in the tarball
 ```
+
+The redirections only cut noise: `pack` triggers `prepack`, which runs the whole
+`clean && tsc` dance a second time, and its banner on stderr would bury the one
+line that matters. `--json` itself writes the manifest to stdout and nothing
+else, which is what makes `> pack-meta.json` safe.
 
 **4. Those snippets are themselves tested.** `tests/workflow.test.ts` extracts the
 real `node -e` bodies out of the YAML and runs them against fixture manifests,
@@ -638,6 +673,13 @@ every `bin` in `package.json` is smoke tested, and `npm run build` still clears
 没有指向不存在源文件的 sourcemap，并把打出来的包装进临时目录再 import 一次库。
 这些片段由 `tests/workflow.test.ts` 从 YAML 里原样抽出来跑，正反例都有，
 所以 YAML 里写错一个字符会在本地就红，而不是等到发版当天。
+
+上面每段 `console` 都是在本仓库里真跑出来的，不是从 YAML 抄一遍再补注释：
+第一段需要 `REPO`（少了会在 `set -u` 上直接死），第二段需要 `GITHUB_WORKSPACE`
+（Actions 会设，本机不会），烂包那段需要 `--ignore-scripts` 并在临时包里当工作目录
+（否则 `prepack` 会把 `dist/` 重建回来，或者 `pack-meta.json` 读到的不是这一份）。
+三个前提都写进正文了，照抄即可复现；这正是这一节存在的意义——闸门只在发版时才跑，
+不写清楚怎么在本地跑一遍，它就永远只是「看起来没问题」。
 
 ## FAQ / 边界
 
