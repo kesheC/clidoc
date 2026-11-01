@@ -39,7 +39,7 @@ Options (record and render, so also run):
 Global (every command):
   --root <dir>         project root holding .clidoc/ (default: .)
   -h, --help           show this help
-  -v, --version        print the version
+  -v, --version        print the version (top level only)
 
 An option the chosen command does not read is a usage error (exit 2) rather
 than a silent no-op: \`clidoc list --max-lines 5\` is rejected, not ignored.
@@ -152,7 +152,7 @@ function suggestOption(arg: string): string | undefined {
  * The parser stays command-agnostic on purpose; this table is the second gate
  * that stops `list --max-lines 5` from looking like it did something.
  */
-const COMMON_OPTIONS = ["--root", "--help", "--version"] as const;
+const COMMON_OPTIONS = ["--root", "--help"] as const;
 
 const RECORD_OPTIONS: readonly string[] = [
   ...COMMON_OPTIONS,
@@ -398,8 +398,17 @@ function assertOptionsUsedByCommand(args: ParsedArgs): void {
   if (args.command === undefined) return;
   const accepted = COMMAND_OPTIONS.get(args.command);
   if (accepted === undefined) return;
+  // --version is a request about the tool, not about the run: `clidoc list
+  // --version` printed the version and exited 0 without listing anything.
+  // --help is different -- every command has one, and it does what it says.
+  if (args.version) {
+    throw new ClidocError(
+      "usage",
+      `--version is not supported by \`${args.command}\`; it applies to "${NAME} --version" on its own.`,
+    );
+  }
   for (const option of args.given) {
-    if (accepted.has(option) || option === "--help" || option === "--version") continue;
+    if (accepted.has(option) || option === "--help") continue;
     const readers = commandsReading(option);
     const applies = readers.length > 0 ? `; it applies to ${formatCommandList(readers)}` : "";
     throw new ClidocError(
@@ -573,7 +582,7 @@ ${USAGE}`);
     return 2;
   }
 
-  if (args.version) {
+  if (args.version && args.command === undefined) {
     process.stdout.write(`${VERSION}\n`);
     return 0;
   }

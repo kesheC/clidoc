@@ -243,6 +243,14 @@ help                     ok       node dist/cli.js --help
 }
 ```
 
+`--version` is a request about the tool, not about the run, so it is answered only at the top level:
+
+```console
+$ clidoc list --version
+clidoc: --version is not supported by `list`; it applies to "clidoc --version" on its own.
+[exit code: 2]
+```
+
 中文：本节四个命令，一句话各自对应上面的英文小节。
 
 `clidoc run` 是最常用的那条：录一次、顺手渲染进 README，等于 `record` + `render`。
@@ -280,6 +288,14 @@ clidoc: list does not take arguments (got "extra.md"). Run "clidoc --help" to li
 
 同理，`--root` 与 `--cwd` 指向不存在的目录时，
 四个命令都会以 `2` 停下，不会默默退回默认值。
+
+`--version` 问的是工具本身，不是这次运行，所以只在顶层回答：
+
+```console
+$ clidoc list --version
+clidoc: --version is not supported by `list`; it applies to "clidoc --version" on its own.
+[exit code: 2]
+```
 
 `clidoc list` 列出已录的快照：id、状态，以及当初那条命令。
 
@@ -381,7 +397,7 @@ Options (record and render, so also run):
 Global (every command):
   --root <dir>         project root holding .clidoc/ (default: .)
   -h, --help           show this help
-  -v, --version        print the version
+  -v, --version        print the version (top level only)
 
 An option the chosen command does not read is a usage error (exit 2) rather
 than a silent no-op: `clidoc list --max-lines 5` is rejected, not ignored.

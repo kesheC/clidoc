@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--version` is a top-level request, not a per-command flag.** `clidoc list
+  --version` printed the version and exited 0 without listing anything, and
+  `clidoc render --version` looked like a render that found nothing to write.
+  Every command now refuses it: ``clidoc: --version is not supported by
+  `list`; it applies to "clidoc --version" on its own.``. `--help` is
+  unchanged -- every command has one, and it does what it says.
+
 ## [0.1.10] - 2026-11-01
 
 ### Fixed
