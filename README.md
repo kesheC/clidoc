@@ -641,6 +641,7 @@ file under `.clidoc/`; `render` writes only `--readme`.
 closest real option (`unknown option "--chek". Did you mean "--check"?`). It
 never guesses and never runs the command without the flag you meant — a CI gate
 that silently degrades to a writing `render` is worse than a red one.
+
 **What does NOT get normalised?** Counts, exit codes, versions and anything
 else that is stable for a given commit. Note the trade-off visible in the demo
 above: `240ms` becomes `<duration>` because a latency *is* volatile between
