@@ -197,6 +197,18 @@ $ clidoc list --max-lines 5
 clidoc: `list` does not read --max-lines; it applies to record, render and run. Run "clidoc --help" to list the options per command.
 [exit code: 2]
 ```
+The same rule covers positional arguments. Only `run` and `record` have
+somewhere to put one -- they hand it to the child process. `render` and `list` read
+none, so naming one is a usage error instead of a silent drop:
+
+```console
+$ clidoc list extra.md
+clidoc: list does not take arguments (got "extra.md"). Run "clidoc --help" to list the options per command.
+[exit code: 2]
+```
+
+`clidoc list -- --weird` gets the same answer: `--` changes what counts as an
+option, not which commands take arguments.
 
 The same applies to `--root` and `--cwd`: if you name a directory that does not
 exist, every command stops with `2` instead of quietly using the default.
@@ -251,6 +263,14 @@ help                     ok       node dist/cli.js --help
 ```console
 $ clidoc list --max-lines 5
 clidoc: `list` does not read --max-lines; it applies to record, render and run. Run "clidoc --help" to list the options per command.
+[exit code: 2]
+```
+位置参数同理：只有 `run` 与 `record` 有地方安放它（交给子进程），
+`render` 与 `list` 一个都不读，点名就是用法错误，而不是悄悄丢掉：
+
+```console
+$ clidoc list extra.md
+clidoc: list does not take arguments (got "extra.md"). Run "clidoc --help" to list the options per command.
 [exit code: 2]
 ```
 
@@ -372,6 +392,10 @@ Argument passing:
   command untouched, even when it looks like a clidoc flag. A clidoc option that
   appears first still wins: --help before "--" shows this help instead of
   running anything.
+
+Positional arguments:
+  run and record hand them to the command. render and list take none, so
+  passing one is a usage error rather than a silent no-op.
 
 Examples:
   clidoc run --id help -- node dist/cli.js --help

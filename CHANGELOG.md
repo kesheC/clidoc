@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A command that reads no arguments now rejects the ones it was given.**
+  Only `run` and `record` have somewhere to put a positional argument -- they
+  hand it to the child process. `render` and `list` read none, but the parser
+  collected them for every command anyway, so `clidoc list extra.md` listed the
+  snapshots and exited 0, and `clidoc list -- --weird` did the same. Both are
+  usage errors now: ``clidoc: list does not take arguments (got "extra.md")``,
+  exit 2.
+
 ## [0.1.9] - 2026-11-01
 
 ### Added

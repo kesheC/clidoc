@@ -55,6 +55,10 @@ Argument passing:
   appears first still wins: --help before "--" shows this help instead of
   running anything.
 
+Positional arguments:
+  run and record hand them to the command. render and list take none, so
+  passing one is a usage error rather than a silent no-op.
+
 Examples:
   ${NAME} run --id help -- node dist/cli.js --help
   ${NAME} record --id changelog -- git log --oneline -5
@@ -426,6 +430,24 @@ function warnAboutEnv(args: ParsedArgs): void {
   }
 }
 
+/**
+ * Reject a positional argument the chosen command has nowhere to put.
+ *
+ * `run` and `record` pass their positionals to the child process, so anything
+ * goes there. `render` and `list` read no positionals at all, and the parser
+ * was collecting them anyway: `clidoc list extra.md` listed the snapshots and
+ * exited 0, which reads as "that argument was fine".
+ */
+function assertNoStrayPositionals(args: ParsedArgs): void {
+  if (args.command !== "render" && args.command !== "list") return;
+  const stray = args.target[0];
+  if (stray === undefined) return;
+  throw new ClidocError(
+    "usage",
+    `${args.command} does not take arguments (got "${stray}"). Run "${NAME} --help" to list the options per command.`,
+  );
+}
+
 async function commandRecord(args: ParsedArgs): Promise<number> {
   warnAboutEnv(args);
   const root = resolveRoot(args);
@@ -549,6 +571,8 @@ ${USAGE}`);
     // to succeed while doing nothing with the flag.
     if (args.rootGiven) assertDirectory(path.resolve(args.root ?? "."), "--root");
     if (args.cwdGiven) assertDirectory(path.resolve(args.cwd), "--cwd");
+
+    assertNoStrayPositionals(args);
 
     switch (args.command) {
       case "run":

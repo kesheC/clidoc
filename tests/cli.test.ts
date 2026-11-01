@@ -341,6 +341,25 @@ describe("options a command never reads", () => {
     expect(run.stderr).toContain("does not read --max-lines");
   });
 
+  // Regression: the parser collected positionals for every command, and only
+  // `run` / `record` have anywhere to put them. `clidoc list extra.md` listed
+  // the snapshots and exited 0, which reads as "that argument was fine".
+  it("rejects a positional argument on the commands that take none", async () => {
+    await cli(["record", "--id", "a", "--", "echo", "one"]);
+    for (const args of [["list", "extra.md"], ["render", "extra.md"], ["list", "--", "--weird"]]) {
+      const run = await cli(args);
+      expect(run.code, args.join(" ")).toBe(2);
+      expect(run.stderr, args.join(" ")).toContain("does not take arguments");
+      expect(run.stdout, args.join(" ")).toBe("");
+    }
+  });
+
+  it("still forwards positionals to the child for run and record", async () => {
+    const run = await cli(["record", "--id", "a", "--", "echo", "--help"]);
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("recorded a");
+  });
+
   it("lets --help through for every command", async () => {
     const runs = await Promise.all(
       ["record", "render", "run", "list"].map((command) => cli([command, "--help"])),
