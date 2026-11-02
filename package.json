@@ -1,6 +1,6 @@
 {
   "name": "clidoc",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Self-updating CLI docs: record real command output straight into your README.",
   "type": "module",
   "bin": {
@@ -27,6 +27,8 @@
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "precoverage": "npm run build",
+    "coverage": "vitest run --coverage",
     "dev": "npm run build && node dist/cli.js",
     "demo": "node demo/make-log.mjs --lines 12000 --out demo/app.log",
     "docs": "npm run docs:record && npm run docs:render",
@@ -51,7 +53,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "typescript": "^5.7.2",
+    "@vitest/coverage-v8": "^4.1.12",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.12"
   },
   "author": "kesheC",
