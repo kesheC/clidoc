@@ -41,7 +41,7 @@ release here ships a tarball you can install directly:
 ```console
 $ npm install -g https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ clidoc --version
-0.1.19
+0.1.20
 ```
 
 Every release publishes the same tarball under a stable name (`clidoc.tgz`) alongside a
@@ -61,7 +61,7 @@ Or as a project dev dependency:
 ```console
 $ npm install -D https://github.com/kesheC/clidoc/releases/latest/download/clidoc.tgz
 $ npx clidoc --version
-0.1.19
+0.1.20
 ```
 
 Or build it from a checkout:
@@ -70,7 +70,7 @@ Or build it from a checkout:
 $ git clone https://github.com/kesheC/clidoc.git && cd clidoc
 $ npm ci && npm run build && npm link
 $ clidoc --version
-0.1.19
+0.1.20
 ```
 
 **Zero runtime dependencies** — Node.js `>=20.11` stdlib only (`node:child_process`,
@@ -84,7 +84,7 @@ $ clidoc --version
 中文：clidoc **没有发布到 npm 官方源**——`clidoc` 这个包名属于另一位作者的
 [`Figmusk/clidoc`](https://github.com/Figmusk/clidoc)。所以每个 release 都附带一份可以直接
 安装的 tarball：上面三段分别是全局安装、作为项目 devDependency，以及从仓库自己构建，
-装完之后 `clidoc --version` 应当输出 `0.1.19`。
+装完之后 `clidoc --version` 应当输出 `0.1.20`。
 
 每次发布都在固定文件名 `clidoc.tgz` 下上传同一份 tarball，并附 `clidoc.tgz.sha256` 校验和；
 想在安装前先校验，就用上面那两条 `curl` 把两个文件下载下来，Linux 上跑
@@ -634,7 +634,7 @@ TARBALL="${{ steps.pack.outputs.tarball }}"
 ```
 
 **1. The tag gate.** Releases are tag-driven, so the tag is the only thing naming
-the version. Without a gate, a `v0.1.11` tag on a `0.1.19` tree uploads 0.1.19
+the version. Without a gate, a `v0.1.11` tag on a `0.1.20` tree uploads 0.1.20
 assets under a 0.1.11 label. Running the extracted body with a drifted tag stops
 before the first `gh` call — `RELEASE_NOTES.md` is never even written:
 
@@ -642,7 +642,7 @@ before the first `gh` call — `RELEASE_NOTES.md` is never even written:
 $ python scripts/extract-workflow-step.py .github/workflows/release.yml "Publish release assets" --local > /tmp/publish.sh
 $ rm -f RELEASE_NOTES.md   # the matching-tag run below leaves one behind
 $ TAG=v0.1.11 REPO=kesheC/clidoc bash /tmp/publish.sh 2>&1; echo "exit $?"
-tag/version mismatch: tag says 0.1.11, package.json says 0.1.19
+tag/version mismatch: tag says 0.1.11, package.json says 0.1.20
 exit 1
 $ test -f RELEASE_NOTES.md && echo written || echo "not written"
 not written
@@ -654,8 +654,8 @@ which is the point: everything local had already passed before any network was
 touched:
 
 ```console
-$ TAG=v0.1.19 REPO=kesheC/clidoc GH_TOKEN=dummy bash /tmp/publish.sh 2>&1; echo "exit $?"
-tag v0.1.19 matches package.json version 0.1.19
+$ TAG=v0.1.20 REPO=kesheC/clidoc GH_TOKEN=dummy bash /tmp/publish.sh 2>&1; echo "exit $?"
+tag v0.1.20 matches package.json version 0.1.20
 HTTP 401: Bad credentials (https://api.github.com/repos/kesheC/clidoc/releases)
 Try authenticating with:  gh auth login -h github.com
 exit 1
@@ -675,7 +675,7 @@ repo:
 $ python scripts/extract-workflow-step.py .github/workflows/ci.yml "Smoke test the packed tarball" --local > /tmp/smoke.sh
 $ GITHUB_WORKSPACE=$PWD bash /tmp/smoke.sh 2>/dev/null | grep -E "package contents ok|clidoc --version =|library import ok"
 package contents ok: 23 entries, 20 under dist/
-clidoc --version = 0.1.19 (expected 0.1.19)
+clidoc --version = 0.1.20 (expected 0.1.20)
 library import ok, 28 exports
 ```
 
