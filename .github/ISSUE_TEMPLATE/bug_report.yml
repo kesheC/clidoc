@@ -60,7 +60,7 @@ body:
     attributes:
       label: clidoc version
       description: The output of `clidoc --version`.
-      placeholder: 0.1.17
+      placeholder: 0.1.18
     validations:
       required: true
 

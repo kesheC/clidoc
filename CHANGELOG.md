@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-11-02
+
 ### Changed
 
 - **The release-gate transcript now removes a leftover `RELEASE_NOTES.md`.** The tag
@@ -15,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the dummy token. Read once from the top it was true; read twice in one shell it was
   false. The block now starts with `rm -f RELEASE_NOTES.md`, and the page reproduces in
   any order.
+
+### Quality
+
+- 174 tests across 11 spec files, 1855 lines of TypeScript.
+- CI matrix: Ubuntu and Windows, Node 20, 22 and 24.
+- Zero runtime dependencies.
 
 ## [0.1.17] - 2026-11-02
 
@@ -395,7 +403,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.1.14]: https://github.com/kesheC/clidoc/compare/v0.1.13...v0.1.14
 [0.1.15]: https://github.com/kesheC/clidoc/compare/v0.1.14...v0.1.15
 [0.1.17]: https://github.com/kesheC/clidoc/compare/v0.1.15...v0.1.17
-[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.17...HEAD
+[0.1.18]: https://github.com/kesheC/clidoc/compare/v0.1.17...v0.1.18
+[Unreleased]: https://github.com/kesheC/clidoc/compare/v0.1.18...HEAD
 [0.1.10]: https://github.com/kesheC/clidoc/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/kesheC/clidoc/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kesheC/clidoc/compare/v0.1.7...v0.1.8
