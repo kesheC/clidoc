@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`CONTRIBUTING.md` was reachable only from the file list.** The security paragraph at the end
   of the README now points at it, in the same bilingual shape that paragraph already uses.
 
+- **`npm run typecheck` never opened a single test file.** `tsconfig.json` included `src` only,
+  while `CONTRIBUTING.md` described the command as "tsc --noEmit, tests included". Assigning a
+  string to a `number` inside `tests/` — a type error the gate exists to catch — came back clean.
+  The typecheck config now includes `tests`, and `rootDir` moved to `tsconfig.build.json` so the
+  published build still emits `src/` and nothing else.
+
 ## [0.1.13] - 2026-11-02
 
 ### Changed

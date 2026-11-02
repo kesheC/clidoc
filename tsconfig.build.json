@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "rootDir": "src",
     "declaration": true,
     // Off for the published build only. package.json ships just dist/, so a
     // .js.map would point at ../src/*.ts that the tarball does not contain:
