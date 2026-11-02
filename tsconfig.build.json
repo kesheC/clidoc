@@ -1,6 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
     "rootDir": "src",
     "declaration": true,
     // Off for the published build only. package.json ships just dist/, so a
@@ -10,7 +12,6 @@
     "sourceMap": false,
     "declarationMap": false
   },
-  "exclude": [
-    "**/*.test.ts"
-  ]
+  "include": ["src"],
+  "exclude": ["**/*.test.ts"]
 }
