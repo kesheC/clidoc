@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a fourteenth rule nobody documented. `tests/package.test.ts` now reads
   `NORMALIZER_NAMES.length` and asserts both sentences quote it, so a rule added without a
   README edit fails with the two numbers next to each other.
+- **The contributing guide promised a test file that does not exist.** It said
+  `tests/readme.test.ts` regenerates the demo log and re-renders the hosted blocks; clidoc has no
+  such file. What CI actually covers is `node dist/cli.js render --check` (the snapshot blocks)
+  and `tests/package.test.ts` (the documented normaliser count), and the guide now names exactly
+  those two and says the error-path transcripts are checked by hand.
 
 ## [0.1.14] - 2026-11-02
 

@@ -39,9 +39,13 @@ npm run build       # tsc -p tsconfig.build.json
 npm test            # vitest run
 ```
 
-Opening the pull request runs them on Ubuntu and Windows across Node 20, 22 and 24. If a change
-touches a transcript the README quotes, CI re-runs that transcript too and fails when the quoted
-output no longer matches.
+Opening the pull request runs them on Ubuntu and Windows across Node 20, 22 and 24.
+
+The blocks clidoc hosts are covered by that CI run: `node dist/cli.js render --check` re-renders
+every recorded snapshot and fails when a block no longer matches, and `tests/package.test.ts` pins
+the normaliser count the prose quotes to `NORMALIZER_NAMES`. The transcripts that show usage
+errors and exit codes are checked by hand against a real run on this machine — if you touch one of
+those, run the command and paste exactly what it printed.
 
 ## House rules
 
