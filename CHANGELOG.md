@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The README's normaliser count had nothing watching it.** "How it works" says the normalisation
+  chain is a fixed length, in English and in Chinese, and the only test touching the table checked
+  that `"ansi"` came first and that two names were present — it would have passed just as happily
+  with a fourteenth rule nobody documented. `tests/package.test.ts` now reads
+  `NORMALIZER_NAMES.length` and asserts both sentences quote it, so a rule added without a
+  README edit fails with the two numbers next to each other.
+
 ## [0.1.14] - 2026-11-02
 
 ### Added

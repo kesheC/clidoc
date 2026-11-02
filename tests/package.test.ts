@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { NORMALIZER_NAMES } from "../src/index.js";
+
 // The published tarball ships dist/ and nothing else that could hold sources.
 // A .js.map whose "sources" point at src/*.ts is therefore a pointer at a file
 // the reader can never open: dead weight that roughly doubles the download.
@@ -10,6 +12,13 @@ import { describe, expect, it } from "vitest";
 // published artifact rather than the editor experience.
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** The number the README states, so a mismatch names both sides. */
+function quoted(text: string, pattern: RegExp): number {
+  const match = pattern.exec(text);
+  if (!match?.[1]) throw new Error(`README no longer states a count for ${pattern}`);
+  return Number(match[1]);
+}
 
 function readJson(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(root, path), "utf8")) as Record<string, unknown>;
@@ -45,5 +54,15 @@ describe("published package", () => {
     const pkg = readJson("package.json") as { bin: Record<string, string>; main: string };
     expect(pkg.bin.clidoc).toBe("./dist/cli.js");
     expect(pkg.main).toBe("./dist/index.js");
+  });
+
+  it("documents every normaliser it runs", () => {
+    // The README states the length of the chain in both languages. That number
+    // is the only place a reader can learn the scope of normalisation without
+    // reading the source, so pin it to the table instead of to prose.
+    const readme = readFileSync(join(root, "README.md"), "utf8");
+    const count = NORMALIZER_NAMES.length;
+    expect(quoted(readme, /a fixed chain of (\d+) rules/)).toBe(count);
+    expect(quoted(readme, /固定的 (\d+) 条规则链/)).toBe(count);
   });
 });
