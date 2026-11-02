@@ -640,6 +640,7 @@ before the first `gh` call — `RELEASE_NOTES.md` is never even written:
 
 ```console
 $ python scripts/extract-workflow-step.py .github/workflows/release.yml "Publish release assets" --local > /tmp/publish.sh
+$ rm -f RELEASE_NOTES.md   # the matching-tag run below leaves one behind
 $ TAG=v0.1.11 REPO=kesheC/clidoc bash /tmp/publish.sh 2>&1; echo "exit $?"
 tag/version mismatch: tag says 0.1.11, package.json says 0.1.17
 exit 1

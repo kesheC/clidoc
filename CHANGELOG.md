@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The release-gate transcript now removes a leftover `RELEASE_NOTES.md`.** The tag
+  mismatch example asserts `test -f RELEASE_NOTES.md` prints `not written`, but the
+  matching-tag example further down the same page writes that file before `gh` rejects
+  the dummy token. Read once from the top it was true; read twice in one shell it was
+  false. The block now starts with `rm -f RELEASE_NOTES.md`, and the page reproduces in
+  any order.
+
 ## [0.1.17] - 2026-11-02
 
 ### Fixed
