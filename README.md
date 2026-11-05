@@ -15,7 +15,7 @@
 Every README has a block like this:
 
 ```text
-$ mytool --help
+mytool --help
 Usage: mytool [options]
   --fast   go faster        <-- written by hand, 14 months ago
 ```
